@@ -3,3 +3,4 @@ outputs/
 cfgs/__pycache__/
 agents/__pycache__/
 envs/__pycache__/
+testing.py
