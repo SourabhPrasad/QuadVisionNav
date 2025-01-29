@@ -112,24 +112,41 @@ class MorAL(nn.Module):
     def entropy(self):
         return self.distribution.entropy().sum(dim=-1)
 
-    def update_distribution(self, observations):
-        mean = self.actor(observations)
+    def update_distribution(self, observations, morph_observations):
+        # Get morph-net output (R12: estimated velocity and morphology)
+        morph_out = self.morph(morph_observations)
+        updated_obs = torch.cat((observations, morph_out), dim=-1)
+        mean = self.actor(updated_obs)
+
+        # print(f"[TEST]: MORPH_NET OUTPUT: {morph_out.shape}")
+        # print(f"[TEST]: UPDATED OBS: {updated_obs.shape}")
+        # print(f"[TEST]: ACTOR OUTPUT: {mean.shape}")
+        
         self.distribution = Normal(mean, mean * 0.0 + self.std)
 
-    def act(self, observations, **kwargs):
+    def act(self, observations, morph_observations, **kwargs):
         self.update_distribution(observations)
         return self.distribution.sample()
 
     def get_actions_log_prob(self, actions):
         return self.distribution.log_prob(actions).sum(dim=-1)
 
-    def act_inference(self, observations):
-        actions_mean = self.actor(observations)
+    def act_inference(self, observations, morph_observations):
+        # Get morph-net output (R12: estimated velocity and morphology)
+        morph_out = self.morph(morph_observations)
+        updated_obs = torch.cat((observations, morph_out), dim=-1)
+        
+        actions_mean = self.actor(updated_obs)
         return actions_mean
 
     def evaluate(self, critic_observations, **kwargs):
         value = self.critic(critic_observations)
+        # print(f"[TEST]: VALUE OUTPUT: {value.shape}")
         return value
+    
+    def morph_estimate(self, morph_observations):
+        estimate = self.morph(morph_observations)
+        return estimate
 
 
 def get_activation(act_name):
@@ -150,31 +167,4 @@ def get_activation(act_name):
     else:
         print("invalid actor_critic_activation function!")
         return None
-    
-# Testing
-def main():
-    num_actor_obs = 93
-    num_critic_obs = 215
-    num_morph_obs = 60
-    num_actions = 12
-    actor_hidden_dims=[512, 256, 128]
-    critic_hidden_dims=[512, 256, 128]
-    morph_hidden_dims=[258, 128,12]
-    actor_critic_activation = "elu"
-    morph_activations = "relu"
-
-    MorAL(
-        num_actor_obs,
-        num_critic_obs,
-        num_morph_obs,
-        num_actions,
-        actor_hidden_dims,
-        critic_hidden_dims,
-        morph_hidden_dims,
-        actor_critic_activation,
-        morph_activations,
-    )
-
-if __name__ == "__main__":
-    main()
 
