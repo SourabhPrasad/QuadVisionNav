@@ -56,6 +56,7 @@ class MorALPPO:
 
         # Morph Net regression
         morph_parameters = [p for name, p in self.actor_critic.named_parameters() if 'morph' in name]
+        reg_loss = nn.MSELoss()
         self.reg_optimizer = optim.Adam(morph_parameters, lr=learning_rate)
 
     def init_storage(
@@ -122,6 +123,7 @@ class MorALPPO:
     def update(self):
         mean_value_loss = 0
         mean_surrogate_loss = 0
+        mean_morph_net_loss = 0
         if self.actor_critic.is_recurrent:
             generator = self.storage.reccurent_mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
         else:
@@ -192,7 +194,7 @@ class MorALPPO:
                 value_loss = (returns_batch - value_batch).pow(2).mean()
 
             ppo_loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
-            reg_loss = nn.MSELoss(morph_est_batch, morph_target_batch)
+            reg_loss = reg_loss(morph_est_batch, morph_target_batch)
 
             # Gradient step
             self.ppo_optimizer.zero_grad()
@@ -208,10 +210,13 @@ class MorALPPO:
 
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
+            mean_morph_net_loss += reg_loss.item()
+
 
         num_updates = self.num_learning_epochs * self.num_mini_batches
         mean_value_loss /= num_updates
         mean_surrogate_loss /= num_updates
+        mean_morph_net_loss /= num_updates
         self.storage.clear()
 
-        return mean_value_loss, mean_surrogate_loss
+        return mean_value_loss, mean_surrogate_loss, mean_morph_net_loss
