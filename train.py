@@ -49,7 +49,8 @@ import os
 import torch
 from datetime import datetime
 
-from rsl_rl.runners import OnPolicyRunner
+# from rsl_rl.runners import OnPolicyRunner
+from networks import OnPolicyRunner
 
 from omni.isaac.lab.envs import (
     DirectMARLEnv,
@@ -70,6 +71,8 @@ torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
 torch.backends.cudnn.deterministic = False
 torch.backends.cudnn.benchmark = False
+
+import envs
 
 
 @hydra_task_config(args_cli.task, "rsl_rl_cfg_entry_point")
