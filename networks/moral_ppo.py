@@ -7,8 +7,8 @@ import torch.optim as optim
 from rsl_rl.modules import ActorCritic
 # from rsl_rl.storage import RolloutStorage
 
-from moral_net import MorAL
-from moral_storage import RolloutStorage
+from .moral_net import MorAL
+from .moral_storage import RolloutStorage
 
 class MorALPPO:
     actor_critic: ActorCritic | MorAL

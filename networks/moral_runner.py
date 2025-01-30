@@ -16,8 +16,8 @@ from rsl_rl.env import VecEnv
 from rsl_rl.modules import EmpiricalNormalization
 from rsl_rl.utils import store_code_state
 
-from moral_net import MorAL
-from moral_ppo import MorALPPO
+from .moral_net import MorAL
+from .moral_ppo import MorALPPO
 
 
 class OnPolicyRunner:
@@ -37,8 +37,11 @@ class OnPolicyRunner:
             num_critic_obs = extras["observations"]["critic"].shape[1]
         else:
             num_critic_obs = num_obs
-        num_morph_obs = extras["observations"]["morph_obs"].shape[1]
-        num_morph_target = extras["observations"]["morph_target"].shape[1]
+        if "morph_obs" in extras["observations"]:
+            num_morph_obs = extras["observations"]["morph_obs"].shape[1]
+            num_morph_target = extras["observations"]["morph_target"].shape[1]
+        else:
+            raise Exception("Morph Net observations/target missing")
         
         # Network
         actor_critic_class = eval(self.policy_cfg.pop("class_name"))  # MorAL
