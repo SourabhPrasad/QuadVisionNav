@@ -18,9 +18,12 @@ from omni.isaac.lab.utils import configclass
 ##
 # Pre-defined configs
 ##
-from omni.isaac.lab_assets.anymal import ANYMAL_C_CFG  # isort: skip
+from omni.isaac.lab_assets.anymal import ANYMAL_C_CFG, ANYDRIVE_3_SIMPLE_ACTUATOR_CFG  # isort: skip
 from omni.isaac.lab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 
+# Change actuator from LSTMActuator to DCMotor
+ANYMAL_C_DC_CFG = ANYMAL_C_CFG
+ANYMAL_C_DC_CFG.actuators = {"legs": ANYDRIVE_3_SIMPLE_ACTUATOR_CFG}
 
 @configclass
 class EventCfg:
@@ -96,7 +99,7 @@ class AnymalCFlatEnvCfg(DirectRLEnvCfg):
     events: EventCfg = EventCfg()
 
     # robot
-    robot: ArticulationCfg = ANYMAL_C_CFG.replace(prim_path="/World/envs/env_.*/Robot")
+    robot: ArticulationCfg = ANYMAL_C_DC_CFG.replace(prim_path="/World/envs/env_.*/Robot")
     contact_sensor: ContactSensorCfg = ContactSensorCfg(
         prim_path="/World/envs/env_.*/Robot/.*", history_length=3, update_period=0.005, track_air_time=True
     )
