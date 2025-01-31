@@ -27,9 +27,16 @@ class AnymalCEnv(DirectRLEnv):
         self._previous_actions = torch.zeros(
             self.num_envs, gym.spaces.flatdim(self.single_action_space), device=self.device
         )
+        self.temporal_observations = torch.zeros(
+            self.num_envs,
+            self.cfg.temporal_range,
+            gym.spaces.flatdim(self.single_action_space) + gym.spaces.flatdim(self.single_observation_space),
+            device=self.device
+        )
 
-        # X/Y linear velocity and yaw angular velocity commands
-        self._commands = torch.zeros(self.num_envs, 3, device=self.device)
+        # inear velocity commands
+        self._commands_linear = torch.zeros(self.num_envs, 3, device=self.device)
+        self._commands_angular = torch.zeros(self.num_envs, 3, device=self.device)
 
         # Logging
         self._episode_sums = {
@@ -57,10 +64,12 @@ class AnymalCEnv(DirectRLEnv):
         self.scene.articulations["robot"] = self._robot
         self._contact_sensor = ContactSensor(self.cfg.contact_sensor)
         self.scene.sensors["contact_sensor"] = self._contact_sensor
-        if isinstance(self.cfg, AnymalCRoughEnvCfg):
-            # we add a height scanner for perceptive locomotion
-            self._height_scanner = RayCaster(self.cfg.height_scanner)
-            self.scene.sensors["height_scanner"] = self._height_scanner
+        # if isinstance(self.cfg, AnymalCRoughEnvCfg):
+        #     # we add a height scanner for perceptive locomotion
+        #     self._height_scanner = RayCaster(self.cfg.height_scanner)
+        #     self.scene.sensors["height_scanner"] = self._height_scanner
+        self._height_scanner = RayCaster(self.cfg.height_scanner)
+        self.scene.sensors["height_scanner"] = self._height_scanner
         self.cfg.terrain.num_envs = self.scene.cfg.num_envs
         self.cfg.terrain.env_spacing = self.scene.cfg.env_spacing
         self._terrain = self.cfg.terrain.class_type(self.cfg.terrain)
@@ -80,29 +89,47 @@ class AnymalCEnv(DirectRLEnv):
 
     def _get_observations(self) -> dict:
         self._previous_actions = self._actions.clone()
-        height_data = None
-        if isinstance(self.cfg, AnymalCRoughEnvCfg):
-            height_data = (
-                self._height_scanner.data.pos_w[:, 2].unsqueeze(1) - self._height_scanner.data.ray_hits_w[..., 2] - 0.5
-            ).clip(-1.0, 1.0)
-        obs = torch.cat(
+        # height_data = None
+        # if isinstance(self.cfg, AnymalCRoughEnvCfg):
+        height_data = (
+            self._height_scanner.data.pos_w[:, 2].unsqueeze(1) - self._height_scanner.data.ray_hits_w[..., 2] - 0.5
+        ).clip(-1.0, 1.0)
+        feet_contacts = self._contact_sensor.compute_first_contact(self.step_dt)[:, self._feet_ids]
+        
+        #TODO: Add PD actuator gains to critic, set actuator type as DCmotor
+        #self._robot.actuator.stiffness
+        #self._robot.actuator.damping
+        
+        policy = torch.cat(
             [
                 tensor
                 for tensor in (
-                    self._robot.data.root_com_lin_vel_b,
                     self._robot.data.root_com_ang_vel_b,
                     self._robot.data.projected_gravity_b,
-                    self._commands,
+                    self._commands_linear,
                     self._robot.data.joint_pos - self._robot.data.default_joint_pos,
                     self._robot.data.joint_vel,
-                    height_data,
                     self._actions,
                 )
                 if tensor is not None
             ],
             dim=-1,
         )
-        observations = {"policy": obs}
+
+        critic = torch.cat(
+            [
+                tensor
+                for tensor in (
+                    policy,
+                    height_data,
+                    self._robot.data.root_lin_vel_b,
+                    feet_contacts,
+                    
+
+                )
+            ]
+        )
+        observations = {"policy": policy}
         return observations
 
     def _get_rewards(self) -> torch.Tensor:
