@@ -27,16 +27,18 @@ class AnymalCEnv(DirectRLEnv):
         self._previous_actions = torch.zeros(
             self.num_envs, gym.spaces.flatdim(self.single_action_space), device=self.device
         )
-        self.temporal_observations = torch.zeros(
+        self._temporal_observations = torch.zeros(
             self.num_envs,
             self.cfg.temporal_range,
             gym.spaces.flatdim(self.single_action_space) + gym.spaces.flatdim(self.single_observation_space),
             device=self.device
         )
 
-        # inear velocity commands
+        # Velocity commands
         self._commands_linear = torch.zeros(self.num_envs, 3, device=self.device)
         self._commands_angular = torch.zeros(self.num_envs, 3, device=self.device)
+
+        self._actuator_params = torch.zeros(self.num_envs, 3, device=self.device)
 
         # Logging
         self._episode_sums = {
@@ -62,6 +64,8 @@ class AnymalCEnv(DirectRLEnv):
     def _setup_scene(self):
         self._robot = Articulation(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
+        
+        # sensors
         self._contact_sensor = ContactSensor(self.cfg.contact_sensor)
         self.scene.sensors["contact_sensor"] = self._contact_sensor
         # if isinstance(self.cfg, AnymalCRoughEnvCfg):
@@ -70,15 +74,35 @@ class AnymalCEnv(DirectRLEnv):
         #     self.scene.sensors["height_scanner"] = self._height_scanner
         self._height_scanner = RayCaster(self.cfg.height_scanner)
         self.scene.sensors["height_scanner"] = self._height_scanner
+        
+        # terrain
         self.cfg.terrain.num_envs = self.scene.cfg.num_envs
         self.cfg.terrain.env_spacing = self.scene.cfg.env_spacing
         self._terrain = self.cfg.terrain.class_type(self.cfg.terrain)
+        
         # clone, filter, and replicate
         self.scene.clone_environments(copy_from_source=False)
         self.scene.filter_collisions(global_prim_paths=[self.cfg.terrain.prim_path])
+        
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
+
+        # actuator parameters
+        robot_mass = self._robot.data.default_mass.sum(dim=1, keepdim=True)
+        nominal_mass = 8.03
+        mass_ratio = robot_mass / nominal_mass
+        eta_a, eta_b, eta_c, eta_d = 0.03499, -0.3338, 1.382, -0.1001
+        actuator_gain_scale = (eta_a * mass_ratio ** 3) + (eta_b * mass_ratio ** 2) + (eta_c * mass_ratio) + eta_d
+        self._actuator_params = torch.cat(
+            [
+                self._robot.data.default_joint_stiffness[:, 0].unsqueeze(dim=1),
+                self._robot.data.default_joint_damping[:, 0].unsqueeze(dim=1),
+                actuator_gain_scale,
+            ],
+            dim=-1
+        )
+
 
     def _pre_physics_step(self, actions: torch.Tensor):
         self._actions = actions.clone()
@@ -94,12 +118,10 @@ class AnymalCEnv(DirectRLEnv):
         height_data = (
             self._height_scanner.data.pos_w[:, 2].unsqueeze(1) - self._height_scanner.data.ray_hits_w[..., 2] - 0.5
         ).clip(-1.0, 1.0)
+        
         feet_contacts = self._contact_sensor.compute_first_contact(self.step_dt)[:, self._feet_ids]
-        
-        #TODO: Add PD actuator gains to critic, set actuator type as DCmotor
-        #self._robot.actuator.stiffness
-        #self._robot.actuator.damping
-        
+        feet_heights = self._robot.data.body_link_pos_w[:, self._feet_ids][..., -1]
+
         policy = torch.cat(
             [
                 tensor
@@ -124,8 +146,9 @@ class AnymalCEnv(DirectRLEnv):
                     height_data,
                     self._robot.data.root_lin_vel_b,
                     feet_contacts,
+                    feet_heights,
+                    self._actuator_params,
                     
-
                 )
             ]
         )
