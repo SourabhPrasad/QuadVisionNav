@@ -11,21 +11,29 @@ from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import (
     RslRlPpoAlgorithmCfg,
 )
 
+from networks.moral_cfg import (
+    RslRlPpoMoralCfg,
+    RslRlMoralRunnerCfg,
+    RslRlMoralPpoAlgorithmCfg,
+)
+
 
 @configclass
 class AnymalCFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 500
     save_interval = 50
-    experiment_name = "anymal_c_flat_direct"
+    experiment_name = "anymal_c_moral_direct"
     empirical_normalization = False
-    policy = RslRlPpoActorCriticCfg(
+    policy = RslRlPpoMoralCfg(
         init_noise_std=1.0,
-        actor_hidden_dims=[128, 128, 128],
-        critic_hidden_dims=[128, 128, 128],
-        activation="elu",
+        actor_hidden_dims=[512, 256, 128],
+        critic_hidden_dims=[512, 256, 128],
+        morph_hidden_dims=[258, 128],
+        actor_critic_activation="elu",
+        morph_activations='relu'
     )
-    algorithm = RslRlPpoAlgorithmCfg(
+    algorithm = RslRlMoralPpoAlgorithmCfg(
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
