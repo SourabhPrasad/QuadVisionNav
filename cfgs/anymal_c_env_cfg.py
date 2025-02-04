@@ -51,6 +51,16 @@ class EventCfg:
         },
     )
 
+    # add_disturbance_force = EventTerm(
+    #     func=mdp.push_by_setting_velocity,
+    #     mode="interval",
+    #     interval_range_s=(4.0, 8.0),
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", body_names="base"),
+    #         "velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)},
+    #     }
+    # )
+
 
 @configclass
 class AnymalCFlatEnvCfg(DirectRLEnvCfg):
@@ -59,11 +69,11 @@ class AnymalCFlatEnvCfg(DirectRLEnvCfg):
     decimation = 4
     action_scale = 0.5
     action_space = 12
-    observation_space = 48
+    observation_space = 45
     state_space = 0
 
     # temporal observations
-    temporal_range = 5
+    temporal_buffer_size = 5
 
     # simulation
     sim: SimulationCfg = SimulationCfg(

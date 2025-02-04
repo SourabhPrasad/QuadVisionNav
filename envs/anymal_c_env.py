@@ -22,23 +22,33 @@ class AnymalCEnv(DirectRLEnv):
     def __init__(self, cfg: AnymalCFlatEnvCfg | AnymalCRoughEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        # Joint position command (deviation from default joint positions)
+        # joint position command (deviation from default joint positions)
         self._actions = torch.zeros(self.num_envs, gym.spaces.flatdim(self.single_action_space), device=self.device)
         self._previous_actions = torch.zeros(
             self.num_envs, gym.spaces.flatdim(self.single_action_space), device=self.device
         )
         self._temporal_observations = torch.zeros(
             self.num_envs,
-            self.cfg.temporal_range,
+            self.cfg.temporal_buffer_size,
             gym.spaces.flatdim(self.single_action_space) + gym.spaces.flatdim(self.single_observation_space),
             device=self.device
         )
+        
+        print(f"[INFO]: Temporal Observation Shape: {self._temporal_observations.shape}")
 
-        # Velocity commands
+        # velocity commands
         self._commands_linear = torch.zeros(self.num_envs, 3, device=self.device)
         self._commands_angular = torch.zeros(self.num_envs, 3, device=self.device)
 
         self._actuator_params = torch.zeros(self.num_envs, 3, device=self.device)
+
+        # body friction coefficient
+        self._body_friction_coef = torch.ones(size=(self.num_envs, 1)) * 0.8
+        self._body_friction_coef = self._body_friction_coef.to(self.device)
+
+        # robot morphology
+        self._anymal_c_morph = torch.tensor((10.0, 0.15, 0.40, 0.11, 0.50, 2.00, 0.27, 0.62, 0.30))
+        self._anymal_c_morph = self._anymal_c_morph.expand(self.num_envs, -1).to(self.device)
 
         # Logging
         self._episode_sums = {
@@ -88,21 +98,6 @@ class AnymalCEnv(DirectRLEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-        # actuator parameters
-        robot_mass = self._robot.data.default_mass.sum(dim=1, keepdim=True)
-        nominal_mass = 8.03
-        mass_ratio = robot_mass / nominal_mass
-        eta_a, eta_b, eta_c, eta_d = 0.03499, -0.3338, 1.382, -0.1001
-        actuator_gain_scale = (eta_a * mass_ratio ** 3) + (eta_b * mass_ratio ** 2) + (eta_c * mass_ratio) + eta_d
-        self._actuator_params = torch.cat(
-            [
-                self._robot.data.default_joint_stiffness[:, 0].unsqueeze(dim=1),
-                self._robot.data.default_joint_damping[:, 0].unsqueeze(dim=1),
-                actuator_gain_scale,
-            ],
-            dim=-1
-        )
-
 
     def _pre_physics_step(self, actions: torch.Tensor):
         self._actions = actions.clone()
@@ -119,8 +114,24 @@ class AnymalCEnv(DirectRLEnv):
             self._height_scanner.data.pos_w[:, 2].unsqueeze(1) - self._height_scanner.data.ray_hits_w[..., 2] - 0.5
         ).clip(-1.0, 1.0)
         
-        feet_contacts = self._contact_sensor.compute_first_contact(self.step_dt)[:, self._feet_ids]
-        feet_heights = self._robot.data.body_link_pos_w[:, self._feet_ids][..., -1]
+        feet_contacts = self._contact_sensor.compute_first_contact(self.step_dt)[:, self._feet_ids].to(self.device)
+        feet_heights = self._robot.data.body_link_pos_w[:, self._feet_ids][..., -1].to(self.device)
+
+        # actuator parameters
+        robot_mass = self._robot.data.default_mass.sum(dim=1, keepdim=True)
+        nominal_mass = 8.03
+        mass_ratio = robot_mass / nominal_mass
+        eta_a, eta_b, eta_c, eta_d = 0.03499, -0.3338, 1.382, -0.1001
+        actuator_gain_scale = (eta_a * mass_ratio ** 3) + (eta_b * mass_ratio ** 2) + (eta_c * mass_ratio) + eta_d
+        # actuator_gain_scale.to(self.device)
+        self._actuator_params = torch.cat(
+            [
+                self._robot.data.default_joint_stiffness[:, 0].unsqueeze(dim=1),
+                self._robot.data.default_joint_damping[:, 0].unsqueeze(dim=1),
+                actuator_gain_scale.to(self.device),
+            ],
+            dim=-1
+        ).to(self.device)
 
         policy = torch.cat(
             [
@@ -136,23 +147,40 @@ class AnymalCEnv(DirectRLEnv):
                 if tensor is not None
             ],
             dim=-1,
-        )
+        ).to(self.device)
 
         critic = torch.cat(
             [
                 tensor
                 for tensor in (
+                    self._robot.data.root_lin_vel_b,
                     policy,
                     height_data,
-                    self._robot.data.root_lin_vel_b,
-                    feet_contacts,
                     feet_heights,
+                    feet_contacts,
+                    self._body_friction_coef,
                     self._actuator_params,
-                    
                 )
-            ]
+            ],
+            dim=-1
         )
-        observations = {"policy": policy}
+
+        morph_target = torch.cat(
+            [
+                self._anymal_c_morph,
+                self._robot.data.root_lin_vel_b
+            ],
+            dim=-1
+        )
+        
+        observations = {
+            "policy": policy,
+            "critic": critic,
+            "morph_obs": self._temporal_observations,
+            "morph_target": morph_target
+        }
+
+        self._update_temporal_observations(torch.cat((policy, self._actions), dim=-1))
         return observations
 
     def _get_rewards(self) -> torch.Tensor:
@@ -224,7 +252,8 @@ class AnymalCEnv(DirectRLEnv):
         self._actions[env_ids] = 0.0
         self._previous_actions[env_ids] = 0.0
         # Sample new commands
-        self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-1.0, 1.0)
+        self._commands_linear[env_ids] = torch.zeros_like(self._commands_linear[env_ids]).uniform_(-1.0, 1.0)
+        self._commands_angular[env_ids] = torch.zeros_like(self._commands_angular[env_ids]).uniform_(-1.0, 1.0)
         # Reset robot state
         joint_pos = self._robot.data.default_joint_pos[env_ids]
         joint_vel = self._robot.data.default_joint_vel[env_ids]
@@ -245,3 +274,7 @@ class AnymalCEnv(DirectRLEnv):
         extras["Episode_Termination/base_contact"] = torch.count_nonzero(self.reset_terminated[env_ids]).item()
         extras["Episode_Termination/time_out"] = torch.count_nonzero(self.reset_time_outs[env_ids]).item()
         self.extras["log"].update(extras)
+
+    def _update_temporal_observations(self, latest_observation):
+        self._temporal_observations[:, :-1] = self._temporal_observations[:, 1:]
+        self._temporal_observations[:, -1] = latest_observation
