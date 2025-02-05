@@ -37,8 +37,8 @@ class AnymalCEnv(DirectRLEnv):
         print(f"[INFO]: Temporal Observation Shape: {self._temporal_observations.shape}")
 
         # velocity commands
-        self._commands_linear = torch.zeros(self.num_envs, 3, device=self.device)
-        self._commands_angular = torch.zeros(self.num_envs, 3, device=self.device)
+        self._commands = torch.zeros(self.num_envs, 3, device=self.device)
+        # self._commands_angular = torch.zeros(self.num_envs, 3, device=self.device)
 
         self._actuator_params = torch.zeros(self.num_envs, 3, device=self.device)
 
@@ -139,7 +139,7 @@ class AnymalCEnv(DirectRLEnv):
                 for tensor in (
                     self._robot.data.root_com_ang_vel_b,
                     self._robot.data.projected_gravity_b,
-                    self._commands_linear,
+                    self._commands,
                     self._robot.data.joint_pos - self._robot.data.default_joint_pos,
                     self._robot.data.joint_vel,
                     self._actions,
@@ -176,7 +176,7 @@ class AnymalCEnv(DirectRLEnv):
         observations = {
             "policy": policy,
             "critic": critic,
-            "morph_obs": self._temporal_observations,
+            "morph_obs": self._temporal_observations.flatten(1, 2),
             "morph_target": morph_target
         }
 
@@ -252,8 +252,8 @@ class AnymalCEnv(DirectRLEnv):
         self._actions[env_ids] = 0.0
         self._previous_actions[env_ids] = 0.0
         # Sample new commands
-        self._commands_linear[env_ids] = torch.zeros_like(self._commands_linear[env_ids]).uniform_(-1.0, 1.0)
-        self._commands_angular[env_ids] = torch.zeros_like(self._commands_angular[env_ids]).uniform_(-1.0, 1.0)
+        self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-1.0, 1.0)
+        # self._commands_angular[env_ids] = torch.zeros_like(self._commands_angular[env_ids]).uniform_(-1.0, 1.0)
         # Reset robot state
         joint_pos = self._robot.data.default_joint_pos[env_ids]
         joint_vel = self._robot.data.default_joint_vel[env_ids]
