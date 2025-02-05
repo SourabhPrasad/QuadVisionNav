@@ -8,7 +8,7 @@ from rsl_rl.modules import ActorCritic
 # from rsl_rl.storage import RolloutStorage
 
 from .moral_net import MorAL
-from .moral_storage import RolloutStorage
+from .moral_storage import MoralRolloutStorage
 
 class MorALPPO:
     actor_critic: ActorCritic | MorAL
@@ -40,8 +40,7 @@ class MorALPPO:
         self.actor_critic = actor_critic
         self.actor_critic.to(self.device)
         self.storage = None  # initialized later
-        self.ppo_optimizer = optim.Adam(self.actor_critic.parameters(), lr=learning_rate)
-        self.transition = RolloutStorage.Transition()
+        self.transition = MoralRolloutStorage.Transition()
 
         # PPO parameters
         self.clip_param = clip_param
@@ -54,10 +53,17 @@ class MorALPPO:
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
 
-        # Morph Net regression
-        morph_parameters = [p for name, p in self.actor_critic.named_parameters() if 'morph' in name]
-        reg_loss = nn.MSELoss()
+        # Training
+        morph_parameters = []
+        ppo_paremeters = []
+        for name, parameter in self.actor_critic.named_parameters():
+            if 'morph' in name:
+                morph_parameters.append(parameter)
+            else:
+                ppo_paremeters.append(parameter)
+        self.ppo_optimizer = optim.Adam(ppo_paremeters, lr=learning_rate)
         self.reg_optimizer = optim.Adam(morph_parameters, lr=learning_rate)
+        self.reg_loss = nn.MSELoss()
 
     def init_storage(
         self,
@@ -69,7 +75,7 @@ class MorALPPO:
         morph_target_shape,
         action_shape
     ):
-        self.storage = RolloutStorage(
+        self.storage = MoralRolloutStorage(
             num_envs,
             num_transitions_per_env,
             actor_obs_shape,
@@ -143,7 +149,7 @@ class MorALPPO:
             hid_states_batch,
             masks_batch,
         ) in generator:
-            self.actor_critic.act(obs_batch, masks=masks_batch, hidden_states=hid_states_batch[0])
+            self.actor_critic.act(obs_batch, morph_obs_batch, masks=masks_batch, hidden_states=hid_states_batch[0])
             actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
             value_batch = self.actor_critic.evaluate(
                 critic_obs_batch, masks=masks_batch, hidden_states=hid_states_batch[1]
@@ -194,7 +200,7 @@ class MorALPPO:
                 value_loss = (returns_batch - value_batch).pow(2).mean()
 
             ppo_loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
-            reg_loss = reg_loss(morph_est_batch, morph_target_batch)
+            morph_loss = self.reg_loss(morph_est_batch, morph_target_batch)
 
             # Gradient step
             self.ppo_optimizer.zero_grad()
@@ -203,14 +209,12 @@ class MorALPPO:
             self.ppo_optimizer.step()
 
             self.reg_optimizer.zero_grad()
-            reg_loss.backward()
+            morph_loss.backward()
             self.reg_optimizer.step()
-
-            #TODO Regression for Morph net
 
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
-            mean_morph_net_loss += reg_loss.item()
+            mean_morph_net_loss += morph_loss.item()
 
 
         num_updates = self.num_learning_epochs * self.num_mini_batches
