@@ -42,7 +42,8 @@ import gymnasium as gym
 import os
 import torch
 
-from rsl_rl.runners import OnPolicyRunner
+# from rsl_rl.runners import OnPolicyRunner
+from networks import OnPolicyRunner
 
 from omni.isaac.lab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from omni.isaac.lab.utils.dict import print_dict
@@ -56,6 +57,7 @@ from omni.isaac.lab_tasks.utils.wrappers.rsl_rl import (
     export_policy_as_onnx,
 )
 
+import envs
 
 def main():
     """Play with RSL-RL agent."""
@@ -111,16 +113,18 @@ def main():
     )
 
     # reset environment
-    obs, _ = env.get_observations()
+    obs, extras = env.get_observations()
+    morph_obs = extras["observations"]["morph_obs"]
     timestep = 0
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
             # agent stepping
-            actions = policy(obs)
+            actions = policy(obs, morph_obs)
             # env stepping
-            obs, _, _, _ = env.step(actions)
+            obs, _, _, infos = env.step(actions)
+            morph_obs = infos["observations"]["morph_obs"]
         if args_cli.video:
             timestep += 1
             # Exit the play loop after recording one video
