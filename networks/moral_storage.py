@@ -9,7 +9,7 @@ import torch
 from rsl_rl.utils import split_and_pad_trajectories
 
 
-class RolloutStorage:
+class MoralRolloutStorage:
     class Transition:
         def __init__(self):
             self.observations = None
