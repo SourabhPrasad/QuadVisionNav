@@ -31,7 +31,7 @@ class MorAL(nn.Module):
         actor_critic_activation = get_activation(actor_critic_activation)
         morph_activation = get_activation(morph_activations)
 
-        mlp_input_dim_a = num_actor_obs
+        mlp_input_dim_a = num_actor_obs + 12 # Adding morph net output size
         mlp_input_dim_c = num_critic_obs
         mlp_input_dim_m = num_morph_obs
         
@@ -125,7 +125,7 @@ class MorAL(nn.Module):
         self.distribution = Normal(mean, mean * 0.0 + self.std)
 
     def act(self, observations, morph_observations, **kwargs):
-        self.update_distribution(observations)
+        self.update_distribution(observations, morph_observations)
         return self.distribution.sample()
 
     def get_actions_log_prob(self, actions):
