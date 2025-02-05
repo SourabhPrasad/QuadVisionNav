@@ -19,7 +19,6 @@ from rsl_rl.utils import store_code_state
 from .moral_net import MorAL
 from .moral_ppo import MorALPPO
 
-
 class OnPolicyRunner:
     """On-policy runner for training and evaluation."""
 
@@ -37,7 +36,8 @@ class OnPolicyRunner:
             num_critic_obs = extras["observations"]["critic"].shape[1]
         else:
             num_critic_obs = num_obs
-        if "morph_obs" in extras["observations"]:
+        
+        if "morph_obs" in extras["observations"] and "morph_target" in extras["observations"]:
             num_morph_obs = extras["observations"]["morph_obs"].shape[1]
             num_morph_target = extras["observations"]["morph_target"].shape[1]
         else:
@@ -133,7 +133,7 @@ class OnPolicyRunner:
                     actions = self.alg.act(obs, critic_obs, morph_obs, morph_target)
                     obs, rewards, dones, infos = self.env.step(actions.to(self.env.device))
                     # move to the right device
-                    obs, critic_obs, rewards, dones = (
+                    obs, critic_obs, morph_obs, morph_target, rewards, dones = (
                         obs.to(self.device),
                         critic_obs.to(self.device),
                         morph_obs.to(self.device),
@@ -285,7 +285,8 @@ class OnPolicyRunner:
     def save(self, path, infos=None):
         saved_dict = {
             "model_state_dict": self.alg.actor_critic.state_dict(),
-            "optimizer_state_dict": self.alg.optimizer.state_dict(),
+            "ppo_optimizer_state_dict": self.alg.ppo_optimizer.state_dict(),
+            "morph_optimizer_state_dict": self.alg.reg_optimizer.state_dict(),
             "iter": self.current_learning_iteration,
             "infos": infos,
         }
@@ -305,7 +306,8 @@ class OnPolicyRunner:
             self.obs_normalizer.load_state_dict(loaded_dict["obs_norm_state_dict"])
             self.critic_obs_normalizer.load_state_dict(loaded_dict["critic_obs_norm_state_dict"])
         if load_optimizer:
-            self.alg.optimizer.load_state_dict(loaded_dict["optimizer_state_dict"])
+            self.alg.ppo_optimizer.load_state_dict(loaded_dict["ppo_optimizer_state_dict"])
+            self.alg.reg_optimizer.load_state_dict(loaded_dict["morph_optimizer_state_dict"])
         self.current_learning_iteration = loaded_dict["iter"]
         return loaded_dict["infos"]
 
