@@ -10,3 +10,5 @@ agents/ANYmal-C.usda
 agents/.thumbs/256x256/ANYmal-C.usda.png
 papers/
 .vscode/
+envs/prev_env.py
+cfgs/prev_cfg.py
