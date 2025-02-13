@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 """
-Ant locomotion environment.
+MorAL Quadruped Locomotion
 """
 
 import gymnasium as gym
@@ -25,7 +25,7 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{cfgs.__name__}:AnymalCFlatEnvCfg",
-        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:AnymalCFlatPPORunnerCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_moral_cfg:AnymalCFlatMoralRunnerCfg",
     },
 )
 
@@ -35,6 +35,16 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{cfgs.__name__}:AnymalCRoughEnvCfg",
-        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:AnymalCRoughPPORunnerCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_moral_cfg:AnymalCRoughMoralRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Isaac-VisNav-Test-Anymal-C-Direct-v0",
+    entry_point="envs:AnymalCEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{cfgs.__name__}:AnymalCFlatEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_moral_cfg:AnymalCFlatTestRunnerCfg",
     },
 )
