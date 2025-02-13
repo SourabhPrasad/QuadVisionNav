@@ -18,12 +18,12 @@ from isaaclab.utils import configclass
 ##
 # Pre-defined configs
 ##
-from isaaclab_assets.robots.anymal import ANYMAL_C_CFG, ANYDRIVE_3_SIMPLE_ACTUATOR_CFG  # isort: skip
+from isaaclab_assets.robots.anymal import ANYMAL_C_CFG# isort: skip
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 
-# Change actuator from LSTMActuator to DCMotor
-ANYMAL_C_DC_CFG = ANYMAL_C_CFG
-ANYMAL_C_DC_CFG.actuators = {"legs": ANYDRIVE_3_SIMPLE_ACTUATOR_CFG}
+from .anymal_c_cfg import ANYMAL_C_DC_CFG
+# ANYMAL_C_DC_CFG = ANYMAL_C_CFG
+# ANYMAL_C_DC_CFG.actuators = {"legs": ANYDRIVE_3_SIMPLE_ACTUATOR_CFG}
 
 @configclass
 class EventCfg:
@@ -51,16 +51,6 @@ class EventCfg:
         },
     )
 
-    # add_disturbance_force = EventTerm(
-    #     func=mdp.push_by_setting_velocity,
-    #     mode="interval",
-    #     interval_range_s=(4.0, 8.0),
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("robot", body_names="base"),
-    #         "velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)},
-    #     }
-    # )
-
 
 @configclass
 class AnymalCFlatEnvCfg(DirectRLEnvCfg):
@@ -72,7 +62,6 @@ class AnymalCFlatEnvCfg(DirectRLEnvCfg):
     observation_space = 45
     state_space = 0
 
-    # temporal observations
     temporal_buffer_size = 5
 
     # simulation
@@ -113,14 +102,6 @@ class AnymalCFlatEnvCfg(DirectRLEnvCfg):
     contact_sensor: ContactSensorCfg = ContactSensorCfg(
         prim_path="/World/envs/env_.*/Robot/.*", history_length=3, update_period=0.005, track_air_time=True
     )
-    height_scanner = RayCasterCfg(
-        prim_path="/World/envs/env_.*/Robot/base",
-        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-        attach_yaw_only=True,
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
-        debug_vis=False,
-        mesh_prim_paths=["/World/ground"],
-    )
 
     # reward scales
     lin_vel_reward_scale = 1.0
@@ -131,7 +112,7 @@ class AnymalCFlatEnvCfg(DirectRLEnvCfg):
     joint_accel_reward_scale = -2.5e-7
     action_rate_reward_scale = -0.01
     feet_air_time_reward_scale = 0.5
-    undersired_contact_reward_scale = -1.0
+    undesired_contact_reward_scale = -1.0
     flat_orientation_reward_scale = -5.0
 
 
