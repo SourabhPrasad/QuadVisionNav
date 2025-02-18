@@ -12,3 +12,5 @@ papers/
 .vscode/
 envs/prev_env.py
 cfgs/prev_cfg.py
+morphologies/.thumbs/
+morphologies/.thumbs/
