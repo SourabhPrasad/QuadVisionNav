@@ -18,7 +18,7 @@ class MorAL(nn.Module):
         critic_hidden_dims=[256, 256, 256],
         morph_hidden_dims=[256, 256, 256],
         actor_critic_activation="elu",
-        morph_activations="elu",
+        morph_activations="relu",
         init_noise_std=1.0,
         **kwargs,
     ):
@@ -113,15 +113,11 @@ class MorAL(nn.Module):
         return self.distribution.entropy().sum(dim=-1)
 
     def update_distribution(self, observations, morph_observations):
-        # Get morph-net output (R12: estimated velocity and morphology)
-        morph_out = self.morph(morph_observations)
-        updated_obs = torch.cat((observations, morph_out), dim=-1)
+        # Get morph-net output
+        # updated_obs = observations
+        morph_est = self.morph(morph_observations)
+        updated_obs = torch.cat((observations, morph_est), dim=-1)
         mean = self.actor(updated_obs)
-
-        # print(f"[TEST]: MORPH_NET OUTPUT: {morph_out.shape}")
-        # print(f"[TEST]: UPDATED OBS: {updated_obs.shape}")
-        # print(f"[TEST]: ACTOR OUTPUT: {mean.shape}")
-        
         self.distribution = Normal(mean, mean * 0.0 + self.std)
 
     def act(self, observations, morph_observations, **kwargs):
@@ -132,16 +128,14 @@ class MorAL(nn.Module):
         return self.distribution.log_prob(actions).sum(dim=-1)
 
     def act_inference(self, observations, morph_observations):
-        # Get morph-net output (R12: estimated velocity and morphology)
-        morph_out = self.morph(morph_observations)
-        updated_obs = torch.cat((observations, morph_out), dim=-1)
-        
+        # updated_obs = observations
+        morph_est = self.morph(morph_observations)
+        updated_obs = torch.cat((observations, morph_est), dim=-1)
         actions_mean = self.actor(updated_obs)
         return actions_mean
 
     def evaluate(self, critic_observations, **kwargs):
         value = self.critic(critic_observations)
-        # print(f"[TEST]: VALUE OUTPUT: {value.shape}")
         return value
     
     def morph_estimate(self, morph_observations):

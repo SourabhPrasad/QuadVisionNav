@@ -41,7 +41,7 @@ class OnPolicyRunner:
             num_morph_obs = extras["observations"]["morph_obs"].shape[1]
             num_morph_target = extras["observations"]["morph_target"].shape[1]
         else:
-            raise Exception("Morph Net observations/target missing")
+            raise Exception("Morph-Net observations/target missing")
         
         # Network
         actor_critic_class = eval(self.policy_cfg.pop("class_name"))  # MorAL

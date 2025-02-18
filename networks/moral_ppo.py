@@ -55,13 +55,13 @@ class MorALPPO:
 
         # Training
         morph_parameters = []
-        ppo_paremeters = []
+        self.ppo_paremeters = []
         for name, parameter in self.actor_critic.named_parameters():
             if 'morph' in name:
                 morph_parameters.append(parameter)
             else:
-                ppo_paremeters.append(parameter)
-        self.ppo_optimizer = optim.Adam(ppo_paremeters, lr=learning_rate)
+                self.ppo_paremeters.append(parameter)
+        self.ppo_optimizer = optim.Adam(self.ppo_paremeters, lr=learning_rate)
         self.reg_optimizer = optim.Adam(morph_parameters, lr=learning_rate)
         self.reg_loss = nn.MSELoss()
 
@@ -158,7 +158,9 @@ class MorALPPO:
             sigma_batch = self.actor_critic.action_std
             entropy_batch = self.actor_critic.entropy
 
+            # print(f"[DEBUG]: Morph Target Batch Size = {morph_target_batch.shape}")
             morph_est_batch = self.actor_critic.morph_estimate(morph_obs_batch)
+            # print(f"[DEBUG]: Morph Estimate Batch Size = {morph_est_batch.shape}")
 
             # KL
             if self.desired_kl is not None and self.schedule == "adaptive":
@@ -205,7 +207,7 @@ class MorALPPO:
             # Gradient step
             self.ppo_optimizer.zero_grad()
             ppo_loss.backward()
-            nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+            nn.utils.clip_grad_norm_(self.ppo_paremeters, self.max_grad_norm)
             self.ppo_optimizer.step()
 
             self.reg_optimizer.zero_grad()
