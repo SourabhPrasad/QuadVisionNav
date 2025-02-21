@@ -7,8 +7,8 @@
                 double radius = 5
             }
             dictionary Perspective = {
-                double3 position = (1.2144129574915623, 1.19157013799797, 1.1811936579414761)
-                double3 target = (-2.112160763313303, -2.094371074308716, -1.0533961373533514)
+                double3 position = (-0.33909396388080354, -1.248810181489719, 1.3172016557833965)
+                double3 target = (0.5699914711845517, 3.717362268493682, -0.9098011821831269)
             }
             dictionary Right = {
                 double3 position = (0, -5, 0)
@@ -32,6 +32,7 @@
             bool "rtx:useViewLightingMode" = 1
         }
     }
+    defaultPrim = "quadruped_template"
     endTimeCode = 1000000
     metersPerUnit = 1
     startTimeCode = 0
@@ -45,15 +46,18 @@ over "Render" (
 {
 }
 
-def Xform "quadruped_template"
+def Xform "quadruped_template" (
+    prepend apiSchemas = ["PhysicsArticulationRootAPI", "PhysxArticulationAPI"]
+)
 {
     quatd xformOp:orient = (1, 0, 0, 0)
     double3 xformOp:scale = (1, 1, 1)
-    double3 xformOp:translate = (0, 0, 0.6200840647752708)
+    double3 xformOp:translate = (0, 0, 0)
     uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
-    def Cube "TRUNK" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysicsArticulationRootAPI", "PhysxArticulationAPI"]
+    def Cube "base" (
+        delete apiSchemas = ["PhysicsArticulationRootAPI", "PhysxArticulationAPI"]
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
     )
     {
         float3[] extent = [(-0.5, -0.5, -0.5), (0.5, 0.5, 0.5)]
@@ -65,8 +69,8 @@ def Xform "quadruped_template"
         bool physxRigidBody:enableCCD = 0
         double size = 1
         quatd xformOp:orient = (1, 0, 0, 0)
-        double3 xformOp:scale = (0.37, 0.09, 0.11)
-        double3 xformOp:translate = (0, 0, 0)
+        double3 xformOp:scale = (0.3700000047683716, 0.09000000357627869, 0.10999999940395355)
+        double3 xformOp:translate = (0, 0, 0.8845748564053498)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "LF_HAA" (
@@ -78,16 +82,16 @@ def Xform "quadruped_template"
             float drive:angular:physics:targetPosition = 0
             float drive:angular:physics:targetVelocity = 0
             uniform token physics:axis = "X"
-            rel physics:body0 = </quadruped_template/TRUNK>
+            rel physics:body0 = </quadruped_template/base>
             rel physics:body1 = </quadruped_template/LF_HIP>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (0.5, 0.5, 0)
-            point3f physics:localPos1 = (2.3841857e-9, 1.7881393e-9, 0)
+            point3f physics:localPos0 = (0.5, 0.5, -2.352116e-7)
+            point3f physics:localPos1 = (2.3841857e-9, 1.7881393e-9, -2.5873275e-8)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
-            float physics:lowerLimit = -60
-            float physics:upperLimit = 60
+            float physics:lowerLimit = -40
+            float physics:upperLimit = 20
             uniform token purpose = "default"
             token visibility = "inherited"
         }
@@ -98,17 +102,18 @@ def Xform "quadruped_template"
         {
             float drive:angular:physics:damping = 0.6
             float drive:angular:physics:stiffness = 20
+            float drive:angular:physics:targetPosition = 0
             uniform token physics:axis = "X"
-            rel physics:body0 = </quadruped_template/TRUNK>
+            rel physics:body0 = </quadruped_template/base>
             rel physics:body1 = </quadruped_template/RF_HIP>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (0.5, -0.5, 0)
-            point3f physics:localPos1 = (0, 0, 0)
+            point3f physics:localPos0 = (0.5, -0.5, -2.352116e-7)
+            point3f physics:localPos1 = (2.3841857e-9, -1.7881393e-9, -2.5873275e-8)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
-            float physics:lowerLimit = -60
-            float physics:upperLimit = 60
+            float physics:lowerLimit = -40
+            float physics:upperLimit = 20
             uniform token purpose = "default"
             token visibility = "inherited"
         }
@@ -120,16 +125,16 @@ def Xform "quadruped_template"
             float drive:angular:physics:damping = 0.6
             float drive:angular:physics:stiffness = 20
             uniform token physics:axis = "X"
-            rel physics:body0 = </quadruped_template/TRUNK>
+            rel physics:body0 = </quadruped_template/base>
             rel physics:body1 = </quadruped_template/LH_HIP>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (-0.5, 0.5, 0)
-            point3f physics:localPos1 = (0, 0, 0)
+            point3f physics:localPos0 = (-0.5, 0.5, -2.352116e-7)
+            point3f physics:localPos1 = (-2.3841857e-9, 1.7881393e-9, -2.5873275e-8)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
-            float physics:lowerLimit = -60
-            float physics:upperLimit = 60
+            float physics:lowerLimit = -40
+            float physics:upperLimit = 20
             uniform token purpose = "default"
             token visibility = "inherited"
         }
@@ -141,23 +146,22 @@ def Xform "quadruped_template"
             float drive:angular:physics:damping = 0.6
             float drive:angular:physics:stiffness = 20
             uniform token physics:axis = "X"
-            rel physics:body0 = </quadruped_template/TRUNK>
+            rel physics:body0 = </quadruped_template/base>
             rel physics:body1 = </quadruped_template/RH_HIP>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (-0.5, -0.5, 0)
-            point3f physics:localPos1 = (0, 0, 0)
+            point3f physics:localPos0 = (-0.5, -0.5, -2.352116e-7)
+            point3f physics:localPos1 = (-2.3841857e-9, -1.7881393e-9, -2.5873275e-8)
             quatf physics:localRot0 = (1, 0, 0, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
-            float physics:lowerLimit = -60
-            float physics:upperLimit = 60
+            float physics:lowerLimit = -40
+            float physics:upperLimit = 20
             uniform token purpose = "default"
             token visibility = "inherited"
         }
     }
 
     def Sphere "LF_HIP" (
-        delete apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
         prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysicsMassAPI"]
     )
     {
@@ -172,7 +176,7 @@ def Xform "quadruped_template"
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (0.185, 0.045, 0)
+        double3 xformOp:translate = (0.185, 0.045, 0.8845748564053498)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "LF_HFE" (
@@ -181,22 +185,22 @@ def Xform "quadruped_template"
         {
             float drive:angular:physics:damping = 0.6
             float drive:angular:physics:stiffness = 20
+            float drive:angular:physics:targetPosition = 46.3
             uniform token physics:axis = "Y"
             rel physics:body0 = </quadruped_template/LF_THIGH>
             rel physics:body1 = </quadruped_template/LF_HIP>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (-0.5, -1.9, 0)
-            point3f physics:localPos1 = (0, 0, 0)
+            point3f physics:localPos0 = (-0.49999988, -1.9, 7.947286e-8)
+            point3f physics:localPos1 = (2.3841857e-9, 1.7881393e-9, -2.5873275e-8)
             quatf physics:localRot0 = (0.70710677, 0, -0.70710677, 0)
-            quatf physics:localRot1 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 6.664002e-8, 0)
             float physics:lowerLimit = -180
             float physics:upperLimit = 180
         }
     }
 
     def Sphere "RF_HIP" (
-        delete apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
         prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysicsMassAPI"]
     )
     {
@@ -211,7 +215,7 @@ def Xform "quadruped_template"
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (0.185, -0.045, 0)
+        double3 xformOp:translate = (0.185, -0.045, 0.8845748564053498)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "RF_HFE" (
@@ -226,17 +230,16 @@ def Xform "quadruped_template"
             rel physics:body1 = </quadruped_template/RF_HIP>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (-0.5, 1.9, 0)
-            point3f physics:localPos1 = (0, 0, 0)
+            point3f physics:localPos0 = (-0.49999988, 1.9, 7.947286e-8)
+            point3f physics:localPos1 = (2.3841857e-9, -1.7881393e-9, -2.5873275e-8)
             quatf physics:localRot0 = (0.70710677, 0, -0.70710677, 0)
-            quatf physics:localRot1 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 6.664002e-8, 0)
             float physics:lowerLimit = -180
             float physics:upperLimit = 180
         }
     }
 
     def Sphere "LH_HIP" (
-        delete apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
         prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysicsMassAPI"]
     )
     {
@@ -251,7 +254,7 @@ def Xform "quadruped_template"
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (-0.185, 0.045, 0)
+        double3 xformOp:translate = (-0.185, 0.045, 0.8845748564053498)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "LH_HFE" (
@@ -265,17 +268,16 @@ def Xform "quadruped_template"
             rel physics:body1 = </quadruped_template/LH_HIP>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (-0.5, -1.9, 1.7763568e-15)
-            point3f physics:localPos1 = (0, 0, 0)
+            point3f physics:localPos0 = (-0.49999988, -1.9, -7.947286e-8)
+            point3f physics:localPos1 = (-2.3841857e-9, 1.7881393e-9, -2.5873275e-8)
             quatf physics:localRot0 = (0.70710677, 0, -0.70710677, 0)
-            quatf physics:localRot1 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 6.664002e-8, 0)
             float physics:lowerLimit = -180
             float physics:upperLimit = 180
         }
     }
 
     def Sphere "RH_HIP" (
-        delete apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
         prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysicsMassAPI"]
     )
     {
@@ -290,7 +292,7 @@ def Xform "quadruped_template"
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (-0.185, -0.045, 0)
+        double3 xformOp:translate = (-0.185, -0.045, 0.8845748564053498)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "RH_HFE" (
@@ -304,10 +306,10 @@ def Xform "quadruped_template"
             rel physics:body1 = </quadruped_template/RH_HIP>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (-0.5, 1.9, 1.7763568e-15)
-            point3f physics:localPos1 = (0, 0, 0)
+            point3f physics:localPos0 = (-0.49999988, 1.9, -7.947286e-8)
+            point3f physics:localPos1 = (-2.3841857e-9, -1.7881393e-9, -2.5873275e-8)
             quatf physics:localRot0 = (0.70710677, 0, -0.70710677, 0)
-            quatf physics:localRot1 = (1, 0, 0, 0)
+            quatf physics:localRot1 = (1, 0, 6.664002e-8, 0)
             float physics:lowerLimit = -180
             float physics:upperLimit = 180
         }
@@ -325,8 +327,8 @@ def Xform "quadruped_template"
         bool physxRigidBody:disableGravity = 0
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
-        double3 xformOp:scale = (0.21, 0.02, 0.03)
-        double3 xformOp:translate = (0.185, 0.083, -0.105)
+        double3 xformOp:scale = (0.20999999344348907, 0.019999999552965164, 0.029999999329447746)
+        double3 xformOp:translate = (0.185, 0.083, 0.7795748564053498)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "LF_KFE" (
@@ -340,12 +342,12 @@ def Xform "quadruped_template"
             rel physics:body1 = </quadruped_template/LF_THIGH>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (-0.5, 0, 3.5527137e-15)
+            point3f physics:localPos0 = (-0.5, -2.4300354e-7, 1.4901161e-7)
             point3f physics:localPos1 = (0.5, 0, 0)
-            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot0 = (1, 0, -1.7114271e-8, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
-            float physics:lowerLimit = -180
-            float physics:upperLimit = 180
+            float physics:lowerLimit = -160
+            float physics:upperLimit = 160
         }
     }
 
@@ -361,8 +363,8 @@ def Xform "quadruped_template"
         bool physxRigidBody:disableGravity = 0
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
-        double3 xformOp:scale = (0.21, 0.02, 0.03)
-        double3 xformOp:translate = (0.185, -0.083, -0.105)
+        double3 xformOp:scale = (0.20999999344348907, 0.019999999552965164, 0.029999999329447746)
+        double3 xformOp:translate = (0.185, -0.083, 0.7795748564053498)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "RF_KFE" (
@@ -376,12 +378,12 @@ def Xform "quadruped_template"
             rel physics:body1 = </quadruped_template/RF_THIGH>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (-0.5, 0, 3.5527137e-15)
+            point3f physics:localPos0 = (-0.5, 2.4300354e-7, 1.4901161e-7)
             point3f physics:localPos1 = (0.5, 0, 0)
-            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot0 = (1, 0, -1.7114271e-8, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
-            float physics:lowerLimit = -180
-            float physics:upperLimit = 180
+            float physics:lowerLimit = -160
+            float physics:upperLimit = 160
         }
     }
 
@@ -397,8 +399,8 @@ def Xform "quadruped_template"
         bool physxRigidBody:disableGravity = 0
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
-        double3 xformOp:scale = (0.21, 0.02, 0.03)
-        double3 xformOp:translate = (-0.185, 0.083, -0.105)
+        double3 xformOp:scale = (0.20999999344348907, 0.019999999552965164, 0.029999999329447746)
+        double3 xformOp:translate = (-0.185, 0.083, 0.7795748564053498)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "LH_KFE" (
@@ -412,12 +414,12 @@ def Xform "quadruped_template"
             rel physics:body1 = </quadruped_template/LH_THIGH>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (-0.5, 0, 0)
+            point3f physics:localPos0 = (-0.5, -2.4300354e-7, -1.4901161e-7)
             point3f physics:localPos1 = (0.5, 0, 0)
-            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot0 = (1, 0, -1.7114271e-8, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
-            float physics:lowerLimit = -180
-            float physics:upperLimit = 180
+            float physics:lowerLimit = -160
+            float physics:upperLimit = 160
         }
     }
 
@@ -433,8 +435,8 @@ def Xform "quadruped_template"
         bool physxRigidBody:disableGravity = 0
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
-        double3 xformOp:scale = (0.21, 0.02, 0.03)
-        double3 xformOp:translate = (-0.185, -0.083, -0.105)
+        double3 xformOp:scale = (0.20999999344348907, 0.019999999552965164, 0.029999999329447746)
+        double3 xformOp:translate = (-0.185, -0.083, 0.7795748564053498)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "RH_KFE" (
@@ -443,18 +445,18 @@ def Xform "quadruped_template"
         {
             float drive:angular:physics:damping = 0.6
             float drive:angular:physics:stiffness = 20
-            float drive:angular:physics:targetPosition = 20.1
+            float drive:angular:physics:targetPosition = -66.6
             uniform token physics:axis = "Y"
             rel physics:body0 = </quadruped_template/RH_CALF>
             rel physics:body1 = </quadruped_template/RH_THIGH>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (-0.5, 0, 0)
+            point3f physics:localPos0 = (-0.5, 2.4300354e-7, -1.4901161e-7)
             point3f physics:localPos1 = (0.5, 0, 0)
-            quatf physics:localRot0 = (1, 0, 0, 0)
+            quatf physics:localRot0 = (1, 0, -1.7114271e-8, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
-            float physics:lowerLimit = -180
-            float physics:upperLimit = 180
+            float physics:lowerLimit = -160
+            float physics:upperLimit = 160
         }
     }
 
@@ -470,8 +472,8 @@ def Xform "quadruped_template"
         bool physxRigidBody:disableGravity = 0
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
-        double3 xformOp:scale = (0.21, 0.013, 0.016)
-        double3 xformOp:translate = (0.185, 0.083, -0.315)
+        double3 xformOp:scale = (0.20999999344348907, 0.013000000268220901, 0.01600000075995922)
+        double3 xformOp:translate = (0.185, 0.083, 0.5695748564053498)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsFixedJoint "LF_FF"
@@ -480,7 +482,7 @@ def Xform "quadruped_template"
             rel physics:body1 = </quadruped_template/LF_CALF>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (0, 0, 0.105)
+            point3f physics:localPos0 = (2.3841857e-9, -3.1590461e-9, 0.104999974)
             point3f physics:localPos1 = (0, 0, 0)
             quatf physics:localRot0 = (0.70710677, 0, 0.70710677, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
@@ -499,8 +501,8 @@ def Xform "quadruped_template"
         bool physxRigidBody:disableGravity = 0
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
-        double3 xformOp:scale = (0.21, 0.013, 0.016)
-        double3 xformOp:translate = (0.185, -0.083, -0.315)
+        double3 xformOp:scale = (0.20999999344348907, 0.013000000268220901, 0.01600000075995922)
+        double3 xformOp:translate = (0.185, -0.083, 0.5695748564053498)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsFixedJoint "RF_FF"
@@ -509,7 +511,7 @@ def Xform "quadruped_template"
             rel physics:body1 = </quadruped_template/RF_CALF>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (0, 0, 0.105)
+            point3f physics:localPos0 = (2.3841857e-9, 3.1590461e-9, 0.104999974)
             point3f physics:localPos1 = (0, 0, 0)
             quatf physics:localRot0 = (0.70710677, 0, 0.70710677, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
@@ -528,8 +530,8 @@ def Xform "quadruped_template"
         bool physxRigidBody:disableGravity = 0
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
-        double3 xformOp:scale = (0.21, 0.013, 0.016)
-        double3 xformOp:translate = (-0.185, 0.083, -0.315)
+        double3 xformOp:scale = (0.20999999344348907, 0.013000000268220901, 0.01600000075995922)
+        double3 xformOp:translate = (-0.185, 0.083, 0.5695748564053498)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsFixedJoint "LH_FF"
@@ -538,7 +540,7 @@ def Xform "quadruped_template"
             rel physics:body1 = </quadruped_template/LH_CALF>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (0, 0, 0.105)
+            point3f physics:localPos0 = (-2.3841857e-9, -3.1590461e-9, 0.104999974)
             point3f physics:localPos1 = (0, 0, 0)
             quatf physics:localRot0 = (0.70710677, 0, 0.70710677, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
@@ -557,8 +559,8 @@ def Xform "quadruped_template"
         bool physxRigidBody:disableGravity = 0
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
-        double3 xformOp:scale = (0.21, 0.013, 0.016)
-        double3 xformOp:translate = (-0.185, -0.083, -0.315)
+        double3 xformOp:scale = (0.20999999344348907, 0.013000000268220901, 0.01600000075995922)
+        double3 xformOp:translate = (-0.185, -0.083, 0.5695748564053498)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsFixedJoint "RH_FF"
@@ -567,7 +569,7 @@ def Xform "quadruped_template"
             rel physics:body1 = </quadruped_template/RH_CALF>
             float physics:breakForce = inf
             float physics:breakTorque = inf
-            point3f physics:localPos0 = (0, 0, 0.105)
+            point3f physics:localPos0 = (-2.3841857e-9, 3.1590461e-9, 0.104999974)
             point3f physics:localPos1 = (0, 0, 0)
             quatf physics:localRot0 = (0.70710677, 0, 0.70710677, 0)
             quatf physics:localRot1 = (1, 0, 0, 0)
@@ -575,7 +577,6 @@ def Xform "quadruped_template"
     }
 
     def Sphere "LF_FOOT" (
-        delete apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
         prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysicsMassAPI"]
     )
     {
@@ -590,12 +591,11 @@ def Xform "quadruped_template"
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (0.185, 0.083, -0.42)
+        double3 xformOp:translate = (0.185, 0.083, 0.46457485640534985)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
     }
 
     def Sphere "RF_FOOT" (
-        delete apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
         prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysicsMassAPI"]
     )
     {
@@ -610,12 +610,11 @@ def Xform "quadruped_template"
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (0.185, -0.083, -0.42)
+        double3 xformOp:translate = (0.185, -0.083, 0.46457485640534985)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
     }
 
     def Sphere "LH_FOOT" (
-        delete apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
         prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysicsMassAPI"]
     )
     {
@@ -630,12 +629,11 @@ def Xform "quadruped_template"
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (-0.185, 0.083, -0.42)
+        double3 xformOp:translate = (-0.185, 0.083, 0.46457485640534985)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
     }
 
     def Sphere "RH_FOOT" (
-        delete apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsMassAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
         prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysicsMassAPI"]
     )
     {
@@ -650,37 +648,8 @@ def Xform "quadruped_template"
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (-0.185, -0.083, -0.42)
+        double3 xformOp:translate = (-0.185, -0.083, 0.46457485640534985)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-    }
-}
-
-def Xform "GroundPlane"
-{
-    quatf xformOp:orient = (1, 0, 0, 0)
-    float3 xformOp:scale = (1, 1, 1)
-    double3 xformOp:translate = (0, 0, 0)
-    uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
-
-    def Mesh "CollisionMesh"
-    {
-        uniform bool doubleSided = 0
-        int[] faceVertexCounts = [4]
-        int[] faceVertexIndices = [0, 1, 2, 3]
-        normal3f[] normals = [(0, 0, 1), (0, 0, 1), (0, 0, 1), (0, 0, 1)]
-        point3f[] points = [(-25, -25, 0), (25, -25, 0), (25, 25, 0), (-25, 25, 0)]
-        color3f[] primvars:displayColor = [(0.5, 0.5, 0.5)]
-        texCoord2f[] primvars:st = [(0, 0), (1, 0), (1, 1), (0, 1)] (
-            interpolation = "varying"
-        )
-    }
-
-    def Plane "CollisionPlane" (
-        prepend apiSchemas = ["PhysicsCollisionAPI"]
-    )
-    {
-        uniform token axis = "Z"
-        uniform token purpose = "guide"
     }
 }
 
