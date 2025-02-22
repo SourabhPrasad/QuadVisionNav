@@ -7,19 +7,15 @@ from isaaclab.utils import configclass
 
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
 
-from networks.moral_cfg import (
-    RslRlPpoMoralCfg,
-    RslRlMoralRunnerCfg,
-    RslRlMoralPpoAlgorithmCfg,
-)
+from networks.moral_cfg import RslRlPpoMoralCfg, RslRlMoralRunnerCfg, RslRlMoralPpoAlgorithmCfg
 
 
 @configclass
-class AnymalCFlatMoralRunnerCfg(RslRlOnPolicyRunnerCfg):
+class MoralFlatRunnerCfg(RslRlMoralPpoAlgorithmCfg):
     num_steps_per_env = 24
     max_iterations = 500
     save_interval = 50
-    experiment_name = "anymal_c_moral_direct"
+    experiment_name = "moral_flat_direct"
     empirical_normalization = False
     policy = RslRlPpoMoralCfg(
         init_noise_std=1.0,
@@ -46,19 +42,21 @@ class AnymalCFlatMoralRunnerCfg(RslRlOnPolicyRunnerCfg):
 
 
 @configclass
-class AnymalCRoughMoralRunnerCfg(RslRlOnPolicyRunnerCfg):
+class MoralRoughRunnerCfg(RslRlMoralRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 1500
     save_interval = 50
-    experiment_name = "anymal_c_rough_direct"
+    experiment_name = "moral_rough_direct"
     empirical_normalization = False
-    policy = RslRlPpoActorCriticCfg(
+    policy = RslRlPpoMoralCfg(
         init_noise_std=1.0,
         actor_hidden_dims=[512, 256, 128],
         critic_hidden_dims=[512, 256, 128],
-        activation="elu",
+        morph_hidden_dims=[258, 128],
+        actor_critic_activation="elu",
+        morph_activations='relu'
     )
-    algorithm = RslRlPpoAlgorithmCfg(
+    algorithm = RslRlMoralPpoAlgorithmCfg(
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
@@ -74,11 +72,11 @@ class AnymalCRoughMoralRunnerCfg(RslRlOnPolicyRunnerCfg):
     )
 
 @configclass
-class AnymalCFlatTestRunnerCfg(RslRlOnPolicyRunnerCfg):
+class MoralTestRunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 500
     save_interval = 50
-    experiment_name = "anymal_c_flat_direct"
+    experiment_name = "moral_test_direct"
     empirical_normalization = False
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,

@@ -4,3 +4,4 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 from .moral_runner import OnPolicyRunner
+from .moral_cfg import RslRlMoralRunnerCfg

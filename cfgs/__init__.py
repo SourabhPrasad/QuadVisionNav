@@ -4,4 +4,4 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Module containing configurations of RL environments"""
 
-from .anymal_c_env_cfg import AnymalCFlatEnvCfg, AnymalCRoughEnvCfg
+from .moral_env_cfg import MoralFlatEnvCfg, MoralRoughEnvCfg

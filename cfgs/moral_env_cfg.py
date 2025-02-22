@@ -15,15 +15,9 @@ from isaaclab.sim import SimulationCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 
-##
-# Pre-defined configs
-##
-from isaaclab_assets.robots.anymal import ANYMAL_C_CFG# isort: skip
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 
-from .anymal_c_cfg import ANYMAL_C_DC_CFG
-# ANYMAL_C_DC_CFG = ANYMAL_C_CFG
-# ANYMAL_C_DC_CFG.actuators = {"legs": ANYDRIVE_3_SIMPLE_ACTUATOR_CFG}
+from .custom_quad_cfg import QUAD_TEMPLATE_CFG
 
 @configclass
 class EventCfg:
@@ -53,7 +47,7 @@ class EventCfg:
 
 
 @configclass
-class AnymalCFlatEnvCfg(DirectRLEnvCfg):
+class MoralFlatEnvCfg(DirectRLEnvCfg):
     # env
     episode_length_s = 20.0
     decimation = 4
@@ -98,7 +92,7 @@ class AnymalCFlatEnvCfg(DirectRLEnvCfg):
     events: EventCfg = EventCfg()
 
     # robot
-    robot: ArticulationCfg = ANYMAL_C_DC_CFG.replace(prim_path="/World/envs/env_.*/Robot")
+    robot: ArticulationCfg = QUAD_TEMPLATE_CFG.replace(prim_path="/World/envs/env_.*/Robot")
     contact_sensor: ContactSensorCfg = ContactSensorCfg(
         prim_path="/World/envs/env_.*/Robot/.*", history_length=3, update_period=0.005, track_air_time=True
     )
@@ -117,7 +111,7 @@ class AnymalCFlatEnvCfg(DirectRLEnvCfg):
 
 
 @configclass
-class AnymalCRoughEnvCfg(AnymalCFlatEnvCfg):
+class MoralRoughEnvCfg(MoralFlatEnvCfg):
     # env
     observation_space = 235
 

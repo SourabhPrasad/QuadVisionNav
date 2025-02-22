@@ -13,38 +13,38 @@ import agents
 
 import cfgs
 
-from .anymal_c_env import AnymalCEnv
+from .moral_env import MoralEnv
 
 ##
 # Register Gym environments.
 ##
 
 gym.register(
-    id="Isaac-VisNav-Flat-Anymal-C-Direct-v0",
-    entry_point="envs:AnymalCEnv",
+    id="Isaac-VisNav-Flat-Direct-v0",
+    entry_point="envs:MoralEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{cfgs.__name__}:AnymalCFlatEnvCfg",
-        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_moral_cfg:AnymalCFlatMoralRunnerCfg",
+        "env_cfg_entry_point": f"{cfgs.__name__}:MoralFlatEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_moral_cfg:MoralFlatRunnerCfg",
     },
 )
 
 gym.register(
-    id="Isaac-VisNav-Rough-Anymal-C-Direct-v0",
-    entry_point="envs:AnymalCEnv",
+    id="Isaac-VisNav-Direct-v0",
+    entry_point="envs:MoralEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{cfgs.__name__}:AnymalCRoughEnvCfg",
-        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_moral_cfg:AnymalCRoughMoralRunnerCfg",
+        "env_cfg_entry_point": f"{cfgs.__name__}:MoralRoughEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_moral_cfg:MoralRoughRunnerCfg",
     },
 )
 
 gym.register(
-    id="Isaac-VisNav-Test-Anymal-C-Direct-v0",
-    entry_point="envs:AnymalCEnv",
+    id="Isaac-VisNav-Test-Direct-v0",
+    entry_point="envs:MoralEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{cfgs.__name__}:AnymalCFlatEnvCfg",
-        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_moral_cfg:AnymalCFlatTestRunnerCfg",
+        "env_cfg_entry_point": f"{cfgs.__name__}:MoralFlatEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_moral_cfg:MoralTestRunnerCfg",
     },
 )

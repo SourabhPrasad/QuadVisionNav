@@ -13,13 +13,12 @@ from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sensors import ContactSensor, RayCaster
 
-from cfgs import AnymalCFlatEnvCfg, AnymalCRoughEnvCfg
+from cfgs import MoralFlatEnvCfg, MoralRoughEnvCfg
 
+class MoralEnv(DirectRLEnv):
+    cfg: MoralFlatEnvCfg | MoralRoughEnvCfg
 
-class AnymalCEnv(DirectRLEnv):
-    cfg: AnymalCFlatEnvCfg | AnymalCRoughEnvCfg
-
-    def __init__(self, cfg: AnymalCFlatEnvCfg | AnymalCRoughEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(self, cfg: MoralFlatEnvCfg | MoralRoughEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
         # Joint position command (deviation from default joint positions)
@@ -59,15 +58,15 @@ class AnymalCEnv(DirectRLEnv):
         }
         # Get specific body indices
         self._base_id, _ = self._contact_sensor.find_bodies("base")
-        self._feet_ids, _ = self._contact_sensor.find_bodies(".*FOOT")
-        self._undesired_contact_body_ids, _ = self._contact_sensor.find_bodies(".*THIGH")
+        self._feet_ids, _ = self._contact_sensor.find_bodies(".*foot")
+        self._undesired_contact_body_ids, _ = self._contact_sensor.find_bodies(".*thigh")
 
     def _setup_scene(self):
         self._robot = Articulation(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
         self._contact_sensor = ContactSensor(self.cfg.contact_sensor)
         self.scene.sensors["contact_sensor"] = self._contact_sensor
-        if isinstance(self.cfg, AnymalCRoughEnvCfg):
+        if isinstance(self.cfg, MoralRoughEnvCfg):
             # we add a height scanner for perceptive locomotion
             self._height_scanner = RayCaster(self.cfg.height_scanner)
             self.scene.sensors["height_scanner"] = self._height_scanner
@@ -90,7 +89,7 @@ class AnymalCEnv(DirectRLEnv):
     def _get_observations(self) -> dict:
         self._previous_actions = self._actions.clone()
         height_data = None
-        if isinstance(self.cfg, AnymalCRoughEnvCfg):
+        if isinstance(self.cfg, MoralRoughEnvCfg):
             height_data = (
                 self._height_scanner.data.pos_w[:, 2].unsqueeze(1) - self._height_scanner.data.ray_hits_w[..., 2] - 0.5
             ).clip(-1.0, 1.0)
