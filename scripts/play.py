@@ -44,9 +44,6 @@ import os
 import time
 import torch
 
-# from rsl_rl.runners import OnPolicyRunner
-from networks import OnPolicyRunner
-
 from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
