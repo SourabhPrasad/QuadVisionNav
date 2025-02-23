@@ -11,7 +11,7 @@ from networks.moral_cfg import RslRlPpoMoralCfg, RslRlMoralRunnerCfg, RslRlMoral
 
 
 @configclass
-class MoralFlatRunnerCfg(RslRlMoralPpoAlgorithmCfg):
+class MoralFlatRunnerCfg(RslRlMoralRunnerCfg):
     num_steps_per_env = 24
     max_iterations = 500
     save_interval = 50
