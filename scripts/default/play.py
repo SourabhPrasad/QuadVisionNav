@@ -8,6 +8,7 @@
 """Launch Isaac Sim Simulator first."""
 
 import argparse
+import sys
 
 from isaaclab.app import AppLauncher
 
@@ -59,6 +60,10 @@ from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkp
 
 import isaaclab_tasks  # noqa: F401
 from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
+
+project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+sys.path.append(project_dir)
+import envs
 
 
 def main():
