@@ -1,8 +1,3 @@
-"""
-Morphology Randomization
-
-Based on a template usd file, generate a bunch of new usd files with random morphologies.
-"""
 from pxr import Usd, Gf
 import random
 import os
@@ -10,6 +5,40 @@ from tqdm import tqdm
 import argparse
 import json
 import math
+
+# Morphological Parameter Ranges
+TRUNK_MASS = (4.00, 28.00)
+TRUNK_WIDTH = (0.09, 0.30)
+TRUNK_HEIGHT = (0.11, 0.19)
+TRUNK_LENGTH = (0.37, 0.65)
+
+HIP_MASS = (0.30, 0.69)
+HIP_LENGTH = (0.03, 0.05)
+
+THIGH_MASS = (0.60, 4.00)
+THIGH_WIDTH = (0.02, 0.04)
+THIGH_HEIGHT = (0.03, 0.05)
+THIGH_LENGTH = (0.21, 0.35)
+
+CALF_MASS = (0.10, 0.86)
+CALF_WIDTH = (0.016, 0.020)
+CALF_HEIGHT = (0.013, 0.019)
+CALF_LENGTH = (0.21, 0.35)
+
+# Control Parameters Ranges
+KP = (20, 80)
+KD = (0.6, 2.0)
+ALPHA = (0.9, 1.1)
+DELTA_M = (-0.02, 0.02)
+
+# Other Parameters
+PAYLOAD = (-2.0, 2.0)
+MOTOR_FRICTIONS = (0.2, 1.25) 
+
+ETA_A = 0.03499
+ETA_B = 60.3338
+ETA_C = 1.382
+ETA_D = -0.1001
 
 def total_mass(stage: Usd.Stage):
     """
@@ -22,247 +51,166 @@ def total_mass(stage: Usd.Stage):
             mass = mass_attr.Get()
             if mass is not None:
                 total_mass += mass
+    
     return total_mass
 
-def euler_to_quat(pitch, yaw, roll):
-    cy = math.cos(yaw * 0.5)
-    sy = math.sin(yaw * 0.5)
-    cp = math.cos(pitch * 0.5)
-    sp = math.sin(pitch * 0.5)
-    cr = math.cos(roll * 0.5)
-    sr = math.sin(roll * 0.5)
+def round_params(params):
+    if isinstance(params, tuple):
+        rounded_params = []
+        for param in params:
+            rounded_params.append(round(param, 2))
+        return rounded_params
+    else:
+        return round(params, 2)
 
-    w = cy * cp * cr + sy * sp * sr
-    x = cy * cp * sr - sy * sp * cr
-    y = sy * cp * sr + cy * sp * cr
-    z = sy * cp * cr - cy * sp * sr
-
-    return Gf.Quatf(w, x, y, z)
-
-def randomize_quadruped(
-        template_path: str,
-        target_dir: str,
-        num_envs: int,
-        seed: int,
-        size_factor_range: tuple[float, float],
-        base_length_range: tuple[float, float],
-        base_width_range: tuple[float, float],
-        base_height_range: tuple[float, float],
-        base_mass_range: tuple[float, float],
-        thigh_length_range: tuple[float, float],
-        thigh_radius_range: tuple[float, float],
-        thigh_mass_range: tuple[float, float],
-        calf_length_range: tuple[float, float],
-        calf_radius_range: tuple[float, float],
-        calf_mass_range: tuple[float, float],
-        motor_p_gain_range: tuple[float, float],
-        motor_d_gain_range: tuple[float, float],
-        center_of_mass_range: tuple[float, float] | None = None,
+def generate_quadrupeds(
+    template_path: str,
+    output_dir: str,
+    num_envs: int,
+    seed: int,
 ):
-    """
-    Randomize the morphology of the quadruped and save to new USD files.
-    """
-    # set random seed
     random.seed(seed)
-
-    # Load the template stage once
-    template_stage = Usd.Stage.Open(template_path)
-
-    # Get the total mass of the template robot
-    template_total_mass = total_mass(template_stage)
-    # Get the PD gains of the template robot
-    template_motor_p_gain = template_stage.GetPrimAtPath("/quadruped/FL_hip/FL_thigh_joint").GetAttribute("drive:angular:physics:stiffness").Get()
-    template_motor_d_gain = template_stage.GetPrimAtPath("/quadruped/FL_hip/FL_thigh_joint").GetAttribute("drive:angular:physics:damping").Get()
-
-    # Pre-generate all random values
-    robot_values = [
-        {
-            'size_factor': random.uniform(*size_factor_range),
-            'base': (random.uniform(*base_length_range), random.uniform(*base_width_range), random.uniform(*base_height_range)),
-            'base_mass': random.uniform(*base_mass_range),
-            'thigh': (random.uniform(*thigh_length_range), random.uniform(*thigh_radius_range)),
-            'thigh_mass': random.uniform(*thigh_mass_range),
-            'calf': (random.uniform(*calf_length_range), random.uniform(*calf_radius_range)),
-            'calf_mass': random.uniform(*calf_mass_range),
-            'motor_p_gain': random.uniform(*motor_p_gain_range),
-            'motor_d_gain': random.uniform(*motor_d_gain_range),
-            # 'center_of_mass': random.uniform(*center_of_mass_range),
+    # pre-generate all morphology parameters
+    keys = [f"quadruped_{num}" for num in range(num_envs)]
+    robot_params = {
+        key: {
+            'base': (random.uniform(*TRUNK_LENGTH), random.uniform(*TRUNK_WIDTH), random.uniform(*TRUNK_HEIGHT)),
+            'base_mass': random.uniform(*TRUNK_MASS),
+            'hip': random.uniform(*HIP_LENGTH),
+            'hip_mass': random.uniform(*HIP_MASS),
+            'thigh': (random.uniform(*THIGH_LENGTH),random.uniform(*THIGH_WIDTH),random.uniform(*THIGH_HEIGHT)),
+            'thigh_mass': random.uniform(*THIGH_MASS),
+            'calf': (random.uniform(*CALF_LENGTH),random.uniform(*CALF_WIDTH),random.uniform(*CALF_HEIGHT)),
+            'calf_mass': random.uniform(*CALF_MASS),
+            'motor_stiffness': random.uniform(*KP),
+            'motor_damping': random.uniform(*KD)
         }
-        for _ in range(num_envs)
-    ]
-    min_base_volume = size_factor_range[0]**3 * base_length_range[0] * base_width_range[0] * base_height_range[0]
-    max_base_volume = size_factor_range[1]**3 * base_length_range[1] * base_width_range[1] * base_height_range[1]
+        for key in keys
+    }
 
-    # elif isinstance(size_factor_range, float):
-    #     # no randomization
-    #     print("\nNo randomization applied because input is not a range, but a value!\n")
-    #     robot_values = [
-    #         {
-    #             'size_factor': size_factor_range,
-    #             'base': (base_length_range, base_width_range, base_height_range),
-    #             'base_mass': base_mass_range,
-    #             'thigh': (thigh_length_range, thigh_radius_range),
-    #             'thigh_mass': thigh_mass_range,
-    #             'calf': (calf_length_range, calf_radius_range),
-    #             'calf_mass': calf_mass_range,
-    #             'motor_p_gain': motor_p_gain_range,
-    #             'motor_d_gain': motor_d_gain_range,
-    #             # 'center_of_mass': center_of_mass_range,
-    #         }
-    #         for _ in range(num_envs)
-    #     ]
-    # else:
-    #     raise ValueError("Invalid input range for size_factor_range")
-        
-    for i, values in enumerate(tqdm(robot_values)):
-        new_stage = Usd.Stage.CreateNew(f"{target_dir}/quadruped_modified_{i}.usda")
+    print("Generating Morphologies...")
+    # open quadruped template
+    template_stage = Usd.Stage.Open(template_path)
+    nomial_mass = float('inf')
+    morphologies = {}
+    # create new .usda files based on the generated parameters
+    for key, value in tqdm(robot_params.items()):
+        # create new stage and copy content from template
+        new_stage = Usd.Stage.CreateNew(f"{output_dir}/{key}.usda")
         new_stage.GetRootLayer().TransferContent(template_stage.GetRootLayer())
 
-        size_factor = values['size_factor']
-
-        # Randomize base
-        base_prim = new_stage.GetPrimAtPath("/quadruped/base")
-        base_length, base_width, base_height = [v * size_factor for v in values['base']]
-        base_volume = base_length * base_width * base_height
-        base_mass_mean = (base_volume-min_base_volume) / (max_base_volume-min_base_volume) * (base_mass_range[1]-base_mass_range[0]) + base_mass_range[0]
-        base_mass_stddev = (base_mass_range[1]-base_mass_range[0]) / 12
-        base_mass = random.gauss(base_mass_mean, base_mass_stddev)
+        # update base
+        base_prim = new_stage.GetPrimAtPath("/quadruped_template/base")
+        base_length, base_width, base_height = round_params(value['base'])
+        base_mass = round_params(value['base_mass'])
         
-        # base_mass = size_factor * values['base_mass']
         base_prim.GetAttribute("xformOp:scale").Set((base_length, base_width, base_height))
         base_prim.GetAttribute("physics:mass").Set(base_mass)
 
-        # TODO Adjust center of mass
-        # com_prim = new_stage.GetPrimAtPath("/quadruped/base/center_of_mass")
-        # com_z = values['center_of_mass'] * base_height
-        # com_prim.GetAttribute("xformOp:translate").Set((0, 0, com_z))
+        # update legs
+        hip_radius = round_params(value['hip'])
+        hip_mass = round_params(value['hip_mass'])
 
-        # Randomize legs
-        thigh_length, thigh_radius = [v * size_factor for v in values['thigh']]
-        thigh_mass = size_factor * values['thigh_mass']
-        calf_length, calf_radius = [v * size_factor for v in values['calf']]
-        calf_mass = size_factor * values['calf_mass']
-        # hip_radius = 0.06
-        hip_radius = new_stage.GetPrimAtPath("/quadruped/FL_hip").GetAttribute("radius").Get()
-        foot_radius = new_stage.GetPrimAtPath("/quadruped/FL_foot").GetAttribute("radius").Get()
-        # Randomize legs, align links and joints
+        thigh_length, thigh_width, thigh_height = round_params(value['thigh'])
+        thigh_mass = round_params(value['thigh_mass'])
 
-        # get the total mass of the new robot
-        hip_mass = new_stage.GetPrimAtPath("/quadruped/FL_hip").GetAttribute("physics:mass").Get()
-        foot_mass = new_stage.GetPrimAtPath("/quadruped/FL_foot").GetAttribute("physics:mass").Get()
-        new_total_mass = base_mass + 4 * thigh_mass + 4 * calf_mass + 4 * hip_mass + 4 * foot_mass
+        calf_length, calf_width, calf_height = round_params(value['calf'])
+        calf_mass = round_params(value['calf_mass'])
 
-        # compute PD gains, according to the GenLoco paper
-        motor_p_gain = template_motor_p_gain * new_total_mass / template_total_mass * values['motor_p_gain']
-        motor_d_gain = template_motor_d_gain * new_total_mass / template_total_mass * values['motor_d_gain']
-        # motor_p_gain = (template_motor_p_gain + 0.375*(new_total_mass-template_total_mass)) * values['motor_p_gain']
-        # motor_d_gain = (template_motor_d_gain + 0.1125*(new_total_mass-template_total_mass)) * values['motor_d_gain']
-
-        # 0.8 can be removed if we want to align hip and body edge
-        leg_positions = {
-            "FL": (base_length/2+hip_radius, base_width/2-hip_radius*0.2, 0),
-            "FR": (base_length/2+hip_radius, -base_width/2+hip_radius*0.2, 0),
-            "RL": (-base_length/2-hip_radius, base_width/2-hip_radius*0.2, 0),
-            "RR": (-base_length/2-hip_radius, -base_width/2+hip_radius*0.2, 0)
+        legs = {
+            "LF": (base_length/2, base_width/2+hip_radius, 0),
+            "RF": (base_length/2, -base_width/2-hip_radius, 0),
+            "LH": (-base_length/2, base_width/2+hip_radius, 0),
+            "RH": (-base_length/2, -base_width/2-hip_radius, 0)
         }
-        for leg, leg_pos in leg_positions.items():
-            # Set hip position
-            hip_prim = new_stage.GetPrimAtPath(f"/quadruped/{leg}_hip")
-            # hip_prim.GetAttribute("radius").Set(hip_radius)
-            hip_prim.GetAttribute("xformOp:translate").Set(leg_pos)
 
-            # Set thigh size, position and mass
-            thigh_prim = new_stage.GetPrimAtPath(f"/quadruped/{leg}_thigh")
-            thigh_prim.GetAttribute("height").Set(thigh_length)
-            thigh_prim.GetAttribute("radius").Set(thigh_radius)
-            thigh_prim.GetAttribute("xformOp:translate").Set((leg_pos[0], leg_pos[1], -thigh_length/2))
+        for leg, pos in legs.items():
+            # update dimensions
+            hip_prim = new_stage.GetPrimAtPath(f"/quadruped_template/{leg}_HIP")
+            hip_prim.GetAttribute("radius").Set(hip_radius)
+            hip_prim.GetAttribute("physics:mass").Set(hip_mass)
+
+            thigh_prim = new_stage.GetPrimAtPath(f"/quadruped_template/{leg}_THIGH")
+            thigh_prim.GetAttribute("xformOp:scale").Set((thigh_length, thigh_width, thigh_height))
             thigh_prim.GetAttribute("physics:mass").Set(thigh_mass)
 
-            # Set calf size, position and mass
-            calf_prim = new_stage.GetPrimAtPath(f"/quadruped/{leg}_calf")
-            calf_prim.GetAttribute("height").Set(calf_length)
-            calf_prim.GetAttribute("radius").Set(calf_radius)
-            calf_prim.GetAttribute("xformOp:translate").Set((leg_pos[0], leg_pos[1], -thigh_length-calf_length/2))
+            calf_prim = new_stage.GetPrimAtPath(f"/quadruped_template/{leg}_CALF")
+            calf_prim.GetAttribute("xformOp:scale").Set((calf_length, calf_width, calf_height))
             calf_prim.GetAttribute("physics:mass").Set(calf_mass)
 
-            # Set foot position
-            foot_prim = new_stage.GetPrimAtPath(f"/quadruped/{leg}_foot")
-            foot_prim.GetAttribute("xformOp:translate").Set((leg_pos[0], leg_pos[1], -thigh_length - calf_length - foot_radius*0.5))
+            foot_prim = new_stage.GetPrimAtPath(f"/quadruped_template/{leg}_FOOT")
 
-            # Align joints
-            # Note that for hip joints, all pos needs to be divided by base_length and base_width because they are scaled
-            hip_joint_prim = new_stage.GetPrimAtPath(f"/quadruped/base/{leg}_hip_joint")
-            hip_joint_prim.GetAttribute("physics:localPos0").Set((leg_pos[0]/base_length, leg_pos[1]/base_width, 0.0))
-            hip_joint_prim.GetAttribute("drive:angular:physics:stiffness").Set(motor_p_gain)
-            hip_joint_prim.GetAttribute("drive:angular:physics:damping").Set(motor_d_gain)
+            # update positions
+            if pos[1] > 0:
+                hip_prim.GetAttribute("xformOp:translate").Set((pos[0], pos[1]-hip_radius, 0))
+                thigh_prim.GetAttribute("xformOp:translate").Set((pos[0], pos[1]+thigh_width/2, -thigh_length/2))
+                calf_prim.GetAttribute("xformOp:translate").Set(
+                    (pos[0], pos[1]+thigh_width/2, -thigh_length-calf_length/2)
+                )
+                foot_prim.GetAttribute("xformOp:translate").Set(
+                    (pos[0], pos[1]+thigh_width/2, -thigh_length-calf_length)
+                )
+            else:
+                hip_prim.GetAttribute("xformOp:translate").Set((pos[0], pos[1]+hip_radius, 0))
+                thigh_prim.GetAttribute("xformOp:translate").Set((pos[0], pos[1]-thigh_width/2, -thigh_length/2))
+                calf_prim.GetAttribute("xformOp:translate").Set(
+                    (pos[0], pos[1]-thigh_width/2, -thigh_length-calf_length/2)
+                )
+                foot_prim.GetAttribute("xformOp:translate").Set(
+                    (pos[0], pos[1]-thigh_width/2, -thigh_length-calf_length)
+                )
 
-            thigh_joint_prim = new_stage.GetPrimAtPath(f"/quadruped/{leg}_hip/{leg}_thigh_joint")
-            thigh_joint_prim.GetAttribute("physics:localPos1").Set((0, 0, thigh_length/2))
-            thigh_joint_prim.GetAttribute("drive:angular:physics:stiffness").Set(motor_p_gain)
-            thigh_joint_prim.GetAttribute("drive:angular:physics:damping").Set(motor_d_gain)
+            # update actuator gains
+            stiffness = round_params(value['motor_stiffness'])
+            damping = round_params(value['motor_damping'])
+            
+            haa_prim = new_stage.GetPrimAtPath(f"/quadruped_template/base/{leg}_HAA")
+            haa_prim.GetAttribute("drive:angular:physics:stiffness").Set(stiffness)
+            haa_prim.GetAttribute("drive:angular:physics:damping").Set(damping)
 
-            calf_joint_prim = new_stage.GetPrimAtPath(f"/quadruped/{leg}_thigh/{leg}_calf_joint")
-            calf_joint_prim.GetAttribute("physics:localPos0").Set((0, 0, -thigh_length/2))
-            calf_joint_prim.GetAttribute("physics:localPos1").Set((0, 0, calf_length/2))
-            calf_joint_prim.GetAttribute("drive:angular:physics:stiffness").Set(motor_p_gain)
-            calf_joint_prim.GetAttribute("drive:angular:physics:damping").Set(motor_d_gain)
+            hfe_prim = new_stage.GetPrimAtPath(f"/quadruped_template/{leg}_HIP/{leg}_HFE")
+            hfe_prim.GetAttribute("drive:angular:physics:stiffness").Set(stiffness)
+            hfe_prim.GetAttribute("drive:angular:physics:damping").Set(damping)
 
-            foot_joint_prim = new_stage.GetPrimAtPath(f"/quadruped/{leg}_calf/{leg}_foot_joint")
-            foot_joint_prim.GetAttribute("physics:localPos0").Set((0, 0, -calf_length/2-foot_radius*0.5))
+            kfe_prim = new_stage.GetPrimAtPath(f"/quadruped_template/{leg}_THIGH/{leg}_KFE")
+            kfe_prim.GetAttribute("drive:angular:physics:stiffness").Set(stiffness)
+            kfe_prim.GetAttribute("drive:angular:physics:damping").Set(damping)
+
+        # find nomial mass and calulate mass ratio
+        quadruped_mass = total_mass(new_stage)
+        if quadruped_mass < nomial_mass:
+            nomial_mass = quadruped_mass
+        mass_ratio = quadruped_mass / nomial_mass
+        
+        # calculate gain scale
+        eta = ETA_A * mass_ratio**3 + ETA_B * mass_ratio**2 + ETA_C * mass_ratio + ETA_D
 
         new_stage.GetRootLayer().Save()
-
-        # update the parameters with actual values
-        values['base'] = (base_length, base_width, base_height)
-        values['base_mass'] = base_mass
-        values['thigh'] = (thigh_length, thigh_radius)
-        values['thigh_mass'] = thigh_mass
-        values['calf'] = (calf_length, calf_radius)
-        values['calf_mass'] = calf_mass
-        values['motor_p_gain'] = motor_p_gain
-        values['motor_d_gain'] = motor_d_gain
-
-    # store the parameters
-    with open(os.path.join(target_dir, "quadruped_params.json"), "w") as f:
-        json.dump(robot_values, f)
+        
+        # store revelevant morphology params
+        morphologies[key] = [
+            base_length,
+            base_width,
+            base_height,
+            base_mass,
+            hip_mass,
+            thigh_length,
+            thigh_mass,
+            calf_length,
+            calf_mass,
+            stiffness,
+            damping,
+            eta
+        ]
+        with open(os.path.join(output_dir, 'morphology_params.json'), 'w') as f:
+            json.dump(morphologies, f)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Randomize robot base morphology")
-    parser.add_argument("--num_envs", type=int, default=1, help="Number of environments to generate")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--output_dir_name", type=str, help="name of the output folder, can be small_quad, med_quad, etc.")
-    args = parser.parse_args()
-
-    seed = args.seed
-    num_envs = args.num_envs
-
-    # get the root directory (path_to_x_nav)
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-    output_dir = os.path.join(root_dir, f"morphologies/{args.output_dir_name}")
-    print(f"Output directory: {output_dir}")
-    os.makedirs(output_dir, exist_ok=True)
-
-    template_path=os.path.join(root_dir, "morphologies/quadruped_template_cyl.usda")
-    print(f"Generating {num_envs} quadrupeds")
-    print(f"Using template path: {template_path}")
-    print(f"Random seed: {seed}")
-    randomize_quadruped(
-        template_path=template_path,
-        target_dir=output_dir,
-        num_envs=num_envs,
-        seed=seed,
-        size_factor_range=(0.8, 1.3),   # small (0.9, 1.1)
-        base_length_range=(0.3, 0.7),   # small (0.3, 0.7)
-        base_width_range=(0.2, 0.3),    # small (0.2, 0.5)
-        base_height_range=(0.08, 0.16),  # small (0.08, 0.2)
-        base_mass_range=(6, 15),         # small (6, 8)
-        thigh_length_range=(0.2, 0.35),
-        thigh_radius_range=(0.02, 0.035),
-        thigh_mass_range=(0.7, 1.3),
-        calf_length_range=(0.15, 0.3),
-        calf_radius_range=(0.02, 0.035),
-        calf_mass_range=(0.1, 0.2),
-        motor_p_gain_range=(0.7, 1.3),  # small (0.7, 1.3)
-        motor_d_gain_range=(0.7, 1.3),  # small (0.7, 1.3)
+    template_path = os.path.join(os.getcwd(), 'morphologies/quadruped_template.usda')
+    output_dir = os.path.join(os.getcwd(), 'morphologies/generation_test')
+    generate_quadrupeds(
+        template_path,
+        output_dir,
+        4096,
+        42,
     )
