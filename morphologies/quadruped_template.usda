@@ -7,8 +7,8 @@
                 double radius = 5
             }
             dictionary Perspective = {
-                double3 position = (-1.0825504458990058, 1.1578836904777323, 2.0076059578048686)
-                double3 target = (3.221626670107935, -1.5533430246611535, -2.422162258513796)
+                double3 position = (-1.595276551945755, 0.4239382205526768, 0.08931795257320413)
+                double3 target = (4.512106501066988, -1.3766258331570862, -1.356183868687803)
             }
             dictionary Right = {
                 double3 position = (0, -5, 0)
@@ -70,7 +70,7 @@ def Xform "quadruped_template" (
         double size = 1
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (0.3700000047683716, 0.09000000357627869, 0.10999999940395355)
-        double3 xformOp:translate = (0, 0, 0.8845748564053498)
+        double3 xformOp:translate = (0, 0, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "LF_HAA" (
@@ -176,7 +176,7 @@ def Xform "quadruped_template" (
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (0.185, 0.045, 0.8845748564053498)
+        double3 xformOp:translate = (0.185, 0.045, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "LF_HFE" (
@@ -215,7 +215,7 @@ def Xform "quadruped_template" (
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (0.185, -0.045, 0.8845748564053498)
+        double3 xformOp:translate = (0.185, -0.045, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "RF_HFE" (
@@ -254,7 +254,7 @@ def Xform "quadruped_template" (
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (-0.185, 0.045, 0.8845748564053498)
+        double3 xformOp:translate = (-0.185, 0.045, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "LH_HFE" (
@@ -292,7 +292,7 @@ def Xform "quadruped_template" (
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (-0.185, -0.045, 0.8845748564053498)
+        double3 xformOp:translate = (-0.185, -0.045, 0)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "RH_HFE" (
@@ -328,7 +328,7 @@ def Xform "quadruped_template" (
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
         double3 xformOp:scale = (0.20999999344348907, 0.019999999552965164, 0.029999999329447746)
-        double3 xformOp:translate = (0.185, 0.083, 0.7795748564053498)
+        double3 xformOp:translate = (0.185, 0.083, -0.105)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "LF_KFE" (
@@ -364,7 +364,7 @@ def Xform "quadruped_template" (
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
         double3 xformOp:scale = (0.20999999344348907, 0.019999999552965164, 0.029999999329447746)
-        double3 xformOp:translate = (0.185, -0.083, 0.7795748564053498)
+        double3 xformOp:translate = (0.185, -0.083, -0.105)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "RF_KFE" (
@@ -400,7 +400,7 @@ def Xform "quadruped_template" (
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
         double3 xformOp:scale = (0.20999999344348907, 0.019999999552965164, 0.029999999329447746)
-        double3 xformOp:translate = (-0.185, 0.083, 0.7795748564053498)
+        double3 xformOp:translate = (-0.185, 0.083, -0.105)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "LH_KFE" (
@@ -436,7 +436,7 @@ def Xform "quadruped_template" (
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
         double3 xformOp:scale = (0.20999999344348907, 0.019999999552965164, 0.029999999329447746)
-        double3 xformOp:translate = (-0.185, -0.083, 0.7795748564053498)
+        double3 xformOp:translate = (-0.185, -0.083, -0.105)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsRevoluteJoint "RH_KFE" (
@@ -473,7 +473,7 @@ def Xform "quadruped_template" (
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
         double3 xformOp:scale = (0.20999999344348907, 0.013000000268220901, 0.01600000075995922)
-        double3 xformOp:translate = (0.185, 0.083, 0.5695748564053498)
+        double3 xformOp:translate = (0.185, 0.083, -0.315)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsFixedJoint "LF_FF"
@@ -502,7 +502,7 @@ def Xform "quadruped_template" (
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
         double3 xformOp:scale = (0.20999999344348907, 0.013000000268220901, 0.01600000075995922)
-        double3 xformOp:translate = (0.185, -0.083, 0.5695748564053498)
+        double3 xformOp:translate = (0.185, -0.083, -0.315)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsFixedJoint "RF_FF"
@@ -531,7 +531,7 @@ def Xform "quadruped_template" (
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
         double3 xformOp:scale = (0.20999999344348907, 0.013000000268220901, 0.01600000075995922)
-        double3 xformOp:translate = (-0.185, 0.083, 0.5695748564053498)
+        double3 xformOp:translate = (-0.185, 0.083, -0.315)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsFixedJoint "LH_FF"
@@ -560,7 +560,7 @@ def Xform "quadruped_template" (
         double size = 1
         quatd xformOp:orient = (0.7071067811865476, 0, 0.7071067811865475, 0)
         double3 xformOp:scale = (0.20999999344348907, 0.013000000268220901, 0.01600000075995922)
-        double3 xformOp:translate = (-0.185, -0.083, 0.5695748564053498)
+        double3 xformOp:translate = (-0.185, -0.083, -0.315)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
 
         def PhysicsFixedJoint "RH_FF"
@@ -577,13 +577,13 @@ def Xform "quadruped_template" (
     }
 
     def Sphere "LF_FOOT" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysicsMassAPI"]
+        delete apiSchemas = ["PhysicsMassAPI"]
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
     )
     {
         float3[] extent = [(-0.02, -0.02, -0.02), (0.02, 0.02, 0.02)]
         bool physics:collisionEnabled = 1
         bool physics:kinematicEnabled = 0
-        float physics:mass = 0.3
         bool physics:rigidBodyEnabled = 1
         bool physxRigidBody:disableGravity = 0
         double radius = 0.02
@@ -591,18 +591,18 @@ def Xform "quadruped_template" (
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (0.185, 0.083, 0.46457485640534985)
+        double3 xformOp:translate = (0.185, 0.083, -0.42)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
     }
 
     def Sphere "RF_FOOT" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysicsMassAPI"]
+        delete apiSchemas = ["PhysicsMassAPI"]
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
     )
     {
         float3[] extent = [(-0.02, -0.02, -0.02), (0.02, 0.02, 0.02)]
         bool physics:collisionEnabled = 1
         bool physics:kinematicEnabled = 0
-        float physics:mass = 0.3
         bool physics:rigidBodyEnabled = 1
         bool physxRigidBody:disableGravity = 0
         double radius = 0.02
@@ -610,18 +610,18 @@ def Xform "quadruped_template" (
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (0.185, -0.083, 0.46457485640534985)
+        double3 xformOp:translate = (0.185, -0.083, -0.42)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
     }
 
     def Sphere "LH_FOOT" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysicsMassAPI"]
+        delete apiSchemas = ["PhysicsMassAPI"]
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
     )
     {
         float3[] extent = [(-0.02, -0.02, -0.02), (0.02, 0.02, 0.02)]
         bool physics:collisionEnabled = 1
         bool physics:kinematicEnabled = 0
-        float physics:mass = 0.3
         bool physics:rigidBodyEnabled = 1
         bool physxRigidBody:disableGravity = 0
         double radius = 0.02
@@ -629,18 +629,18 @@ def Xform "quadruped_template" (
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (-0.185, 0.083, 0.46457485640534985)
+        double3 xformOp:translate = (-0.185, 0.083, -0.42)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
     }
 
     def Sphere "RH_FOOT" (
-        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI", "PhysicsMassAPI"]
+        delete apiSchemas = ["PhysicsMassAPI"]
+        prepend apiSchemas = ["PhysicsRigidBodyAPI", "PhysxRigidBodyAPI", "PhysicsCollisionAPI", "PhysxCollisionAPI"]
     )
     {
         float3[] extent = [(-0.02, -0.02, -0.02), (0.02, 0.02, 0.02)]
         bool physics:collisionEnabled = 1
         bool physics:kinematicEnabled = 0
-        float physics:mass = 0.3
         bool physics:rigidBodyEnabled = 1
         bool physxRigidBody:disableGravity = 0
         double radius = 0.02
@@ -648,7 +648,7 @@ def Xform "quadruped_template" (
         custom int refinementLevel = 2
         quatd xformOp:orient = (1, 0, 0, 0)
         double3 xformOp:scale = (1, 1, 1)
-        double3 xformOp:translate = (-0.185, -0.083, 0.46457485640534985)
+        double3 xformOp:translate = (-0.185, -0.083, -0.42)
         uniform token[] xformOpOrder = ["xformOp:translate", "xformOp:orient", "xformOp:scale"]
     }
 }
