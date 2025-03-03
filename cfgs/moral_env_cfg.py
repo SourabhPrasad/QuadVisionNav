@@ -2,6 +2,10 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
+import os
+from os import listdir
+import time
+import re
 
 import isaaclab.envs.mdp as mdp
 import isaaclab.sim as sim_utils
@@ -17,7 +21,10 @@ from isaaclab.utils import configclass
 
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 
-from .custom_quad_cfg import QUAD_TEMPLATE_CFG
+from .custom_quad_cfg import QUAD_TEMPLATE_CFG, QUAD_TEMPLATE_CYL_CFG
+
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ASSET_DIR = os.path.join(ROOT_DIR, "morphologies/generated_quads")
 
 @configclass
 class EventCfg:
@@ -40,7 +47,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="base"),
-            "mass_distribution_params": (-5.0, 5.0),
+            "mass_distribution_params": (-2.0, 2.0),
             "operation": "add",
         },
     )
@@ -53,7 +60,7 @@ class MoralFlatEnvCfg(DirectRLEnvCfg):
     decimation = 4
     action_scale = 0.5
     action_space = 12
-    observation_space = 45
+    observation_space = 48
     state_space = 0
 
     temporal_buffer_size = 5
@@ -86,13 +93,38 @@ class MoralFlatEnvCfg(DirectRLEnvCfg):
     )
 
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=False)
 
     # events
     events: EventCfg = EventCfg()
 
     # robot
-    robot: ArticulationCfg = QUAD_TEMPLATE_CFG.replace(prim_path="/World/envs/env_.*/Robot")
+    asset_dir = ASSET_DIR
+    # get list of usda file in the folder
+    quad_usd_list = [file for file in listdir(ASSET_DIR) if file.endswith(".usda")][:10] # small to speed up startup
+    # natural sort the list
+    quad_usd_list.sort(key=lambda f: int(re.search(r'\d+', f).group()))
+    quad_usd_path = [os.path.join(ASSET_DIR, file) for file in quad_usd_list]
+    robot: ArticulationCfg = QUAD_TEMPLATE_CFG.replace(
+        prim_path="/World/envs/env_.*/Robot",
+        spawn=sim_utils.MultiUsdFileCfg(
+            usd_path=quad_usd_path,
+            random_choice=False,
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                disable_gravity=False,
+                retain_accelerations=False,
+                linear_damping=0.0,
+                angular_damping=0.0,
+                max_linear_velocity=1000.0,
+                max_angular_velocity=1000.0,
+                max_depenetration_velocity=1.0,
+            ),
+            articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+                enabled_self_collisions=False, solver_position_iteration_count=4, solver_velocity_iteration_count=0
+            ),
+            activate_contact_sensors=True,
+        )
+    )
     contact_sensor: ContactSensorCfg = ContactSensorCfg(
         prim_path="/World/envs/env_.*/Robot/.*", history_length=3, update_period=0.005, track_air_time=True
     )
