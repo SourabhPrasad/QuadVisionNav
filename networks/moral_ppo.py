@@ -63,7 +63,9 @@ class MorALPPO:
                 self.ppo_paremeters.append(parameter)
         self.ppo_optimizer = optim.Adam(self.ppo_paremeters, lr=learning_rate)
         self.reg_optimizer = optim.Adam(morph_parameters, lr=learning_rate)
-        self.reg_loss = nn.MSELoss()
+        
+        self.beta = 0.5
+        self.reg_loss_func = nn.MSELoss()
 
     def init_storage(
         self,
@@ -202,7 +204,9 @@ class MorALPPO:
                 value_loss = (returns_batch - value_batch).pow(2).mean()
 
             ppo_loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
-            morph_loss = self.reg_loss(morph_est_batch, morph_target_batch)
+            morph_loss = self.reg_loss_func(morph_est_batch[:, :9], morph_target_batch[:, :9])
+            vel_loss = self.reg_loss_func(morph_est_batch[:, 9:], morph_target_batch[:, 9:])
+            loss_regg = morph_loss + vel_loss + surrogate_loss.item()
 
             # Gradient step
             self.ppo_optimizer.zero_grad()
@@ -211,7 +215,7 @@ class MorALPPO:
             self.ppo_optimizer.step()
 
             self.reg_optimizer.zero_grad()
-            morph_loss.backward()
+            loss_regg.backward()
             self.reg_optimizer.step()
 
             mean_value_loss += value_loss.item()
