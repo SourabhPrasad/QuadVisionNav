@@ -139,6 +139,7 @@ def generate_quadrupeds(
             calf_prim.GetAttribute("physics:mass").Set(calf_mass)
 
             foot_prim = new_stage.GetPrimAtPath(f"/quadruped_template/{leg}_FOOT")
+            foot_joint_prim = new_stage.GetPrimAtPath(f"/quadruped_template/{leg}_CALF/{leg}_FF")
 
             # update positions
             if pos[1] > 0:
@@ -150,6 +151,7 @@ def generate_quadrupeds(
                 foot_prim.GetAttribute("xformOp:translate").Set(
                     (pos[0], pos[1]+thigh_width/2, -thigh_length-calf_length)
                 )
+
             else:
                 hip_prim.GetAttribute("xformOp:translate").Set((pos[0], pos[1]+hip_radius, 0))
                 thigh_prim.GetAttribute("xformOp:translate").Set((pos[0], pos[1]-thigh_width/2, -thigh_length/2))
@@ -159,6 +161,8 @@ def generate_quadrupeds(
                 foot_prim.GetAttribute("xformOp:translate").Set(
                     (pos[0], pos[1]-thigh_width/2, -thigh_length-calf_length)
                 )
+            # align fixed foot join
+            foot_joint_prim.GetAttribute("physics:localPos0").Set((0, 0, calf_length/2))
 
             # update actuator gains
             stiffness = round_params(value['motor_stiffness'])
@@ -188,7 +192,7 @@ def generate_quadrupeds(
         new_stage.GetRootLayer().Save()
         
         # store revelevant morphology params
-        morphologies[key] = [
+        morphologies[key+'.usda'] = [
             base_length,
             base_width,
             base_height,
@@ -207,7 +211,7 @@ def generate_quadrupeds(
 
 if __name__ == "__main__":
     template_path = os.path.join(os.getcwd(), 'morphologies/quadruped_template.usda')
-    output_dir = os.path.join(os.getcwd(), 'morphologies/generation_test')
+    output_dir = os.path.join(os.getcwd(), 'morphologies/generated_quads')
     generate_quadrupeds(
         template_path,
         output_dir,
