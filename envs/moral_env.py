@@ -5,8 +5,12 @@
 
 from __future__ import annotations
 
+import os
+import json
+
 import gymnasium as gym
 import torch
+import numpy as np
 
 import isaaclab.sim as sim_utils
 from isaaclab.assets import Articulation
@@ -34,8 +38,16 @@ class MoralEnv(DirectRLEnv):
             device=self.device
         )
 
-        self._anymal_c_morph = torch.tensor((10.0, 0.15, 0.40, 0.11, 0.50, 2.00, 0.27, 0.62, 0.30))
-        self._anymal_c_morph = self._anymal_c_morph.expand(self.num_envs, -1).to(self.device)
+        # get morphology and actuator parameters
+        self._morphology = None
+        self._actuator_gains = None
+        with open(
+            os.path.join(self.cfg.asset_dir, 'morphology_params.json'), 'r'
+        ) as file:
+            params = torch.Tensor(list((json.load(file).values()))[:self.num_envs])
+            # split morphology data and actuator gains
+            self._morphologies = params[:, :9].to(self.device)
+            self._actuator_gains = params[:, 9:].to(self.device)
 
         # X/Y linear velocity and yaw angular velocity commands
         self._commands = torch.zeros(self.num_envs, 3, device=self.device)
@@ -56,10 +68,11 @@ class MoralEnv(DirectRLEnv):
                 "flat_orientation_l2",
             ]
         }
+        
         # Get specific body indices
         self._base_id, _ = self._contact_sensor.find_bodies("base")
-        self._feet_ids, _ = self._contact_sensor.find_bodies(".*foot")
-        self._undesired_contact_body_ids, _ = self._contact_sensor.find_bodies(".*thigh")
+        self._feet_ids, _ = self._contact_sensor.find_bodies(".*FOOT")
+        self._undesired_contact_body_ids, _ = self._contact_sensor.find_bodies(".*THIGH")
 
     def _setup_scene(self):
         self._robot = Articulation(self.cfg.robot)
@@ -74,7 +87,8 @@ class MoralEnv(DirectRLEnv):
         self.cfg.terrain.env_spacing = self.scene.cfg.env_spacing
         self._terrain = self.cfg.terrain.class_type(self.cfg.terrain)
         # clone and replicate
-        self.scene.clone_environments(copy_from_source=False)
+        # self.scene.clone_environments(copy_from_source=False)
+        self.scene.filter_collisions(global_prim_paths=[self.cfg.terrain.prim_path])
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
@@ -94,13 +108,17 @@ class MoralEnv(DirectRLEnv):
                 self._height_scanner.data.pos_w[:, 2].unsqueeze(1) - self._height_scanner.data.ray_hits_w[..., 2] - 0.5
             ).clip(-1.0, 1.0)
         
-        feet_contact = self._contact_sensor.compute_first_contact(self.step_dt)[:, self._feet_ids].to(self.device)
+        net_contact_forces = self._contact_sensor.data.net_forces_w_history
+        feet_contact = (
+            torch.max(torch.norm(net_contact_forces[:, :, self._feet_ids], dim=-1), dim=1)[0] > 1.0
+        ).to(self.device)
         feet_height = self._robot.data.body_link_pos_w[:, self._feet_ids][..., -1].to(self.device)
 
         policy_obs = torch.cat(
             [
                 tensor
                 for tensor in (
+                    self._robot.data.root_lin_vel_b,
                     self._robot.data.root_ang_vel_b,
                     self._robot.data.projected_gravity_b,
                     self._commands,
@@ -119,9 +137,11 @@ class MoralEnv(DirectRLEnv):
                 for tensor in (
                     self._robot.data.root_lin_vel_b,
                     policy_obs,
+                    self._morphologies,
                     height_data,
                     feet_height,
                     feet_contact,
+                    self._actuator_gains,
                 )
                 if tensor is not None
             ],
@@ -130,7 +150,7 @@ class MoralEnv(DirectRLEnv):
 
         morph_target = torch.cat(
             [
-                self._anymal_c_morph,
+                self._morphologies,
                 self._robot.data.root_lin_vel_b
             ],
             dim=-1
@@ -239,4 +259,6 @@ class MoralEnv(DirectRLEnv):
     def _update_temporal_observations(self, latest_observation):
         self._temporal_observations[:, :-1] = self._temporal_observations[:, 1:]
         self._temporal_observations[:, -1] = latest_observation
+
+
     
