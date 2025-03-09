@@ -30,7 +30,7 @@ gym.register(
 )
 
 gym.register(
-    id="Isaac-VisNav-Direct-v0",
+    id="Isaac-VisNav-Rough-Direct-v0",
     entry_point="envs:MoralEnv",
     disable_env_checker=True,
     kwargs={
