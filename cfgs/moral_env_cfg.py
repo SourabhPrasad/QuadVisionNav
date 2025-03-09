@@ -60,7 +60,7 @@ class MoralFlatEnvCfg(DirectRLEnvCfg):
     decimation = 4
     action_scale = 0.5
     action_space = 12
-    observation_space = 48
+    observation_space = 45
     state_space = 0
 
     temporal_buffer_size = 5
