@@ -21,7 +21,7 @@ SIMPLE_ACTUATOR_CFG = DCMotorCfg(
 
 QUAD_TEMPLATE_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
-        usd_path=os.path.join(ASSET_PATH, 'quadruped_template.usda'),
+        usd_path=os.path.join(ASSET_PATH, 'quadruped_87.usda'),
         activate_contact_sensors=True,          
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=False,
