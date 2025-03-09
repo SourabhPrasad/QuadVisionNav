@@ -54,18 +54,9 @@ class MorALPPO:
         self.use_clipped_value_loss = use_clipped_value_loss
 
         # Training
-        morph_parameters = []
-        self.ppo_paremeters = []
-        for name, parameter in self.actor_critic.named_parameters():
-            if 'morph' in name:
-                morph_parameters.append(parameter)
-            else:
-                self.ppo_paremeters.append(parameter)
-        self.ppo_optimizer = optim.Adam(self.ppo_paremeters, lr=learning_rate)
-        self.reg_optimizer = optim.Adam(morph_parameters, lr=learning_rate)
-        
-        self.beta = 0.5
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=learning_rate)
         self.reg_loss_func = nn.MSELoss()
+        self.beta = 0.2
 
     def init_storage(
         self,
@@ -132,10 +123,12 @@ class MorALPPO:
         mean_value_loss = 0
         mean_surrogate_loss = 0
         mean_morph_net_loss = 0
+        
         if self.actor_critic.is_recurrent:
             generator = self.storage.reccurent_mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
         else:
             generator = self.storage.mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
+        
         for (
             obs_batch,
             critic_obs_batch,
@@ -151,6 +144,7 @@ class MorALPPO:
             hid_states_batch,
             masks_batch,
         ) in generator:
+            
             self.actor_critic.act(obs_batch, morph_obs_batch, masks=masks_batch, hidden_states=hid_states_batch[0])
             actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
             value_batch = self.actor_critic.evaluate(
@@ -160,9 +154,7 @@ class MorALPPO:
             sigma_batch = self.actor_critic.action_std
             entropy_batch = self.actor_critic.entropy
 
-            # print(f"[DEBUG]: Morph Target Batch Size = {morph_target_batch.shape}")
             morph_est_batch = self.actor_critic.morph_estimate(morph_obs_batch)
-            # print(f"[DEBUG]: Morph Estimate Batch Size = {morph_est_batch.shape}")
 
             # KL
             if self.desired_kl is not None and self.schedule == "adaptive":
@@ -181,7 +173,7 @@ class MorALPPO:
                     elif kl_mean < self.desired_kl / 2.0 and kl_mean > 0.0:
                         self.learning_rate = min(1e-2, self.learning_rate * 1.5)
 
-                    for param_group in self.ppo_optimizer.param_groups:
+                    for param_group in self.optimizer.param_groups:
                         param_group["lr"] = self.learning_rate
 
             # Surrogate loss
@@ -203,24 +195,26 @@ class MorALPPO:
             else:
                 value_loss = (returns_batch - value_batch).pow(2).mean()
 
-            ppo_loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
+            # Total Loss calculated as per the paper
+            loss_policy = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
+            # morphology loss
             morph_loss = self.reg_loss_func(morph_est_batch[:, :9], morph_target_batch[:, :9])
+            # velocity loss
             vel_loss = self.reg_loss_func(morph_est_batch[:, 9:], morph_target_batch[:, 9:])
-            loss_regg = morph_loss + vel_loss + surrogate_loss.item()
+            # total regression loss
+            loss_reg = morph_loss + vel_loss
+            # Total loss
+            loss = (self.beta * loss_reg) + ((1 - self.beta) * loss_policy)
 
             # Gradient step
-            self.ppo_optimizer.zero_grad()
-            ppo_loss.backward()
-            nn.utils.clip_grad_norm_(self.ppo_paremeters, self.max_grad_norm)
-            self.ppo_optimizer.step()
-
-            self.reg_optimizer.zero_grad()
-            loss_regg.backward()
-            self.reg_optimizer.step()
+            self.optimizer.zero_grad()
+            loss.backward()
+            nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+            self.optimizer.step()
 
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
-            mean_morph_net_loss += morph_loss.item()
+            mean_morph_net_loss += loss_reg.item()
 
 
         num_updates = self.num_learning_epochs * self.num_mini_batches
