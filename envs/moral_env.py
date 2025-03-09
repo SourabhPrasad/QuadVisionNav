@@ -10,9 +10,10 @@ import json
 
 import gymnasium as gym
 import torch
-import numpy as np
+import math
 
 import isaaclab.sim as sim_utils
+import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sensors import ContactSensor, RayCaster
@@ -25,12 +26,12 @@ class MoralEnv(DirectRLEnv):
     def __init__(self, cfg: MoralFlatEnvCfg | MoralRoughEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
-        # Joint position command (deviation from default joint positions)
         self._actions = torch.zeros(self.num_envs, gym.spaces.flatdim(self.single_action_space), device=self.device)
         self._previous_actions = torch.zeros(
             self.num_envs, gym.spaces.flatdim(self.single_action_space), device=self.device
         )
 
+        # tensor to store temporal observation (morph-net input)
         self._temporal_observations = torch.zeros(
             self.num_envs,
             self.cfg.temporal_buffer_size,
@@ -44,10 +45,12 @@ class MoralEnv(DirectRLEnv):
         with open(
             os.path.join(self.cfg.asset_dir, 'morphology_params.json'), 'r'
         ) as file:
-            params = torch.Tensor(list((json.load(file).values()))[:self.num_envs])
+            # params = torch.Tensor(list((json.load(file).values()))[:self.num_envs])
+            params = torch.Tensor(list((json.load(file)['quadruped_87.usda']))).to(device=self.device)
+            params = params.expand(self.num_envs, -1)
             # split morphology data and actuator gains
-            self._morphologies = params[:, :9].to(self.device)
-            self._actuator_gains = params[:, 9:].to(self.device)
+            self._morphologies = params[:, :9]
+            self._actuator_gains = params[:, 9:]
 
         # X/Y linear velocity and yaw angular velocity commands
         self._commands = torch.zeros(self.num_envs, 3, device=self.device)
@@ -108,17 +111,31 @@ class MoralEnv(DirectRLEnv):
                 self._height_scanner.data.pos_w[:, 2].unsqueeze(1) - self._height_scanner.data.ray_hits_w[..., 2] - 0.5
             ).clip(-1.0, 1.0)
         
+        # feet data (contact and height)
         net_contact_forces = self._contact_sensor.data.net_forces_w_history
         feet_contact = (
             torch.max(torch.norm(net_contact_forces[:, :, self._feet_ids], dim=-1), dim=1)[0] > 1.0
         ).to(self.device)
-        feet_height = self._robot.data.body_link_pos_w[:, self._feet_ids][..., -1].to(self.device)
+        feet_height = self._robot.data.body_pos_w[:, self._feet_ids][..., -1].to(self.device)
 
+        # print(f"[DEBUG]: Feet Contact: {feet_contact}")
+        # print(f"[DEBUG]: Feet Height: {feet_height}")
+
+        # ground truth value for training morph-net
+        morph_target = torch.cat(
+            [
+                self._morphologies,
+                self._robot.data.root_lin_vel_b
+            ],
+            dim=-1
+        )
+
+        # actor observations
         policy_obs = torch.cat(
             [
                 tensor
                 for tensor in (
-                    self._robot.data.root_lin_vel_b,
+                    # self._robot.data.root_lin_vel_b,
                     self._robot.data.root_ang_vel_b,
                     self._robot.data.projected_gravity_b,
                     self._commands,
@@ -131,6 +148,7 @@ class MoralEnv(DirectRLEnv):
             dim=-1,
         )
 
+        # critic observation
         critic_obs = torch.cat(
             [
                 tensor
@@ -148,15 +166,13 @@ class MoralEnv(DirectRLEnv):
             dim=-1
         )
 
-        morph_target = torch.cat(
-            [
-                self._morphologies,
-                self._robot.data.root_lin_vel_b
-            ],
-            dim=-1
-        )
-
+        # update temporal observation buffer with latest action and observation
         self._update_temporal_observations(torch.cat((policy_obs, self._actions), dim=-1))
+
+        # print(f"[DEBUG] Policy: {policy_obs.shape}")
+        # print(f"[DEBUG] Critic: {critic_obs.shape}")
+        # print(f"[DEBUG] Target: {morph_target.shape}")
+        # print(f"[DEBUG] Temporal: {self._temporal_observations.flatten(1, 2).shape}")
 
         observations = {
             "policy": policy_obs,
@@ -218,8 +234,13 @@ class MoralEnv(DirectRLEnv):
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         time_out = self.episode_length_buf >= self.max_episode_length - 1
-        net_contact_forces = self._contact_sensor.data.net_forces_w_history
-        died = torch.any(torch.max(torch.norm(net_contact_forces[:, :, self._base_id], dim=-1), dim=1)[0] > 1.0, dim=1)
+        # net_contact_forces = self._contact_sensor.data.net_forces_w_history
+        # died = torch.any(torch.max(torch.norm(net_contact_forces[:, :, self._base_id], dim=-1), dim=1)[0] > 1.0, dim=1)
+        up_vector = torch.tensor([0.0, 0.0, 1.0], device=self.device).expand(self.num_envs, 3)
+        up_vector = math_utils.quat_rotate(self._robot.data.root_quat_w, up_vector)
+        tilt_angle = torch.acos(up_vector[:, 2])
+        died = tilt_angle > math.pi / 3  # 60 degrees
+        
         return died, time_out
 
     def _reset_idx(self, env_ids: torch.Tensor | None):
