@@ -118,6 +118,7 @@ class OnPolicyRunner:
         self.train_mode()  # switch to train mode (for dropout for example)
 
         ep_infos = []
+        highest_mean_reward = float('-inf')
         rewbuffer = deque(maxlen=100)
         lenbuffer = deque(maxlen=100)
         cur_reward_sum = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
@@ -176,11 +177,16 @@ class OnPolicyRunner:
                 self.alg.compute_returns(critic_obs)
 
             mean_value_loss, mean_surrogate_loss, mean_regression_loss = self.alg.update()
+            mean_reward = statistics.mean(rewbuffer)
             stop = time.time()
             learn_time = stop - start
             self.current_learning_iteration = it
             if self.log_dir is not None:
                 self.log(locals())
+            if mean_reward > highest_mean_reward:
+                print(f"[INFO]: Saving current best model with reward: {mean_reward}")
+                highest_mean_reward = mean_reward
+                self.save(os.path.join(self.log_dir, f"model_best.pt"))
             if it % self.save_interval == 0:
                 self.save(os.path.join(self.log_dir, f"model_{it}.pt"))
             ep_infos.clear()
@@ -193,6 +199,7 @@ class OnPolicyRunner:
                         self.writer.save_file(path)
 
         self.save(os.path.join(self.log_dir, f"model_{self.current_learning_iteration}.pt"))
+        print(f"Highest Mean Reward: {highest_mean_reward}")
 
     def log(self, locs: dict, width: int = 80, pad: int = 35):
         self.tot_timesteps += self.num_steps_per_env * self.env.num_envs
@@ -285,8 +292,7 @@ class OnPolicyRunner:
     def save(self, path, infos=None):
         saved_dict = {
             "model_state_dict": self.alg.actor_critic.state_dict(),
-            "ppo_optimizer_state_dict": self.alg.ppo_optimizer.state_dict(),
-            "morph_optimizer_state_dict": self.alg.reg_optimizer.state_dict(),
+            "optimizer_state_dict": self.alg.optimizer.state_dict(),
             "iter": self.current_learning_iteration,
             "infos": infos,
         }
@@ -306,8 +312,7 @@ class OnPolicyRunner:
             self.obs_normalizer.load_state_dict(loaded_dict["obs_norm_state_dict"])
             self.critic_obs_normalizer.load_state_dict(loaded_dict["critic_obs_norm_state_dict"])
         if load_optimizer:
-            self.alg.ppo_optimizer.load_state_dict(loaded_dict["ppo_optimizer_state_dict"])
-            self.alg.reg_optimizer.load_state_dict(loaded_dict["morph_optimizer_state_dict"])
+            self.alg.optimizer.load_state_dict(loaded_dict["optimizer_state_dict"])
         self.current_learning_iteration = loaded_dict["iter"]
         return loaded_dict["infos"]
 
