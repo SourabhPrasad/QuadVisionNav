@@ -20,6 +20,7 @@ from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
+from .curriculum_terrain_cfg import ROUGH_TERRAINS_CURR_CFG
 
 from .custom_quad_cfg import QUAD_TEMPLATE_CFG, QUAD_TEMPLATE_CYL_CFG
 
@@ -61,9 +62,10 @@ class MoralFlatEnvCfg(DirectRLEnvCfg):
     action_scale = 0.5
     action_space = 12
     observation_space = 45
-    state_space = 0
+    state_space = 68
 
     temporal_buffer_size = 5
+    velocity_cmd_threshold = 0.1
 
     # simulation
     sim: SimulationCfg = SimulationCfg(
@@ -101,29 +103,29 @@ class MoralFlatEnvCfg(DirectRLEnvCfg):
     # robot
     asset_dir = ASSET_DIR
     # get list of usda file in the folder
-    quad_usd_list = [file for file in listdir(ASSET_DIR) if file.endswith(".usda")][:10] # small to speed up startup
+    quad_usd_list = [file for file in listdir(ASSET_DIR) if file.endswith(".usda")]#[:10] # small to speed up startup
     # natural sort the list
     quad_usd_list.sort(key=lambda f: int(re.search(r'\d+', f).group()))
     quad_usd_path = [os.path.join(ASSET_DIR, file) for file in quad_usd_list]
     robot: ArticulationCfg = QUAD_TEMPLATE_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
-        spawn=sim_utils.MultiUsdFileCfg(
-            usd_path=quad_usd_path,
-            random_choice=False,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                disable_gravity=False,
-                retain_accelerations=False,
-                linear_damping=0.0,
-                angular_damping=0.0,
-                max_linear_velocity=1000.0,
-                max_angular_velocity=1000.0,
-                max_depenetration_velocity=1.0,
-            ),
-            articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-                enabled_self_collisions=False, solver_position_iteration_count=4, solver_velocity_iteration_count=0
-            ),
-            activate_contact_sensors=True,
-        )
+        # spawn=sim_utils.MultiUsdFileCfg(
+        #     usd_path=quad_usd_path,
+        #     random_choice=False,
+        #     rigid_props=sim_utils.RigidBodyPropertiesCfg(
+        #         disable_gravity=False,
+        #         retain_accelerations=False,
+        #         linear_damping=0.0,
+        #         angular_damping=0.0,
+        #         max_linear_velocity=1000.0,
+        #         max_angular_velocity=1000.0,
+        #         max_depenetration_velocity=1.0,
+        #     ),
+        #     articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+        #         enabled_self_collisions=False, solver_position_iteration_count=4, solver_velocity_iteration_count=0
+        #     ),
+        #     activate_contact_sensors=True,
+        # )
     )
     contact_sensor: ContactSensorCfg = ContactSensorCfg(
         prim_path="/World/envs/env_.*/Robot/.*", history_length=3, update_period=0.005, track_air_time=True
@@ -145,13 +147,13 @@ class MoralFlatEnvCfg(DirectRLEnvCfg):
 @configclass
 class MoralRoughEnvCfg(MoralFlatEnvCfg):
     # env
-    observation_space = 235
+    state_space = 210
 
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",
-        terrain_generator=ROUGH_TERRAINS_CFG,
-        max_init_terrain_level=9,
+        terrain_generator=ROUGH_TERRAINS_CURR_CFG,
+        max_init_terrain_level=0,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
@@ -171,8 +173,8 @@ class MoralRoughEnvCfg(MoralFlatEnvCfg):
         prim_path="/World/envs/env_.*/Robot/base",
         offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
         attach_yaw_only=True,
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
-        debug_vis=False,
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[2.0, 2.0]),
+        debug_vis=True,
         mesh_prim_paths=["/World/ground"],
     )
 
