@@ -36,12 +36,13 @@ class OnPolicyRunner:
             num_critic_obs = extras["observations"]["critic"].shape[1]
         else:
             num_critic_obs = num_obs
-        
         if "morph_obs" in extras["observations"] and "morph_target" in extras["observations"]:
             num_morph_obs = extras["observations"]["morph_obs"].shape[1]
             num_morph_target = extras["observations"]["morph_target"].shape[1]
         else:
             raise Exception("Morph-Net observations/target missing")
+        if "mean_level" in extras["observations"]:
+            self._mean_level = extras["observations"]["mean_level"]
         
         # Network
         actor_critic_class = eval(self.policy_cfg.pop("class_name"))  # MorAL
@@ -53,6 +54,7 @@ class OnPolicyRunner:
         alg_class = eval(self.alg_cfg.pop("class_name"))  # MorALPPO
         self.alg: MorALPPO = alg_class(actor_critic, device=self.device, **self.alg_cfg)
 
+        # Hyperparameters
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
         self.save_interval = self.cfg["save_interval"]
         self.empirical_normalization = self.cfg["empirical_normalization"]
@@ -109,14 +111,21 @@ class OnPolicyRunner:
                 self.env.episode_length_buf, high=int(self.env.max_episode_length)
             )
         
+        # get inital observations
         obs, extras = self.env.get_observations()
         critic_obs = extras["observations"].get("critic", obs)
         morph_obs = extras["observations"]["morph_obs"]
         morph_target = extras["observations"]["morph_target"]
         obs, critic_obs = obs.to(self.device), critic_obs.to(self.device)
         morph_obs, morph_target = morph_obs.to(self.device), morph_target.to(self.device)
+        
+        # mean terrain level (None if curriculum is False)
+        mean_level = None
+        if "mean_level" in extras["observations"]:
+            mean_level = extras["observations"]["mean_level"]
         self.train_mode()  # switch to train mode (for dropout for example)
 
+        # metrics
         ep_infos = []
         highest_mean_reward = float('-inf')
         rewbuffer = deque(maxlen=100)
@@ -131,25 +140,24 @@ class OnPolicyRunner:
             # Rollout
             with torch.inference_mode():
                 for i in range(self.num_steps_per_env):
+                    # perform action and store relevant data
                     actions = self.alg.act(obs, critic_obs, morph_obs, morph_target)
                     obs, rewards, dones, infos = self.env.step(actions.to(self.env.device))
                     # move to the right device
-                    obs, critic_obs, morph_obs, morph_target, rewards, dones = (
-                        obs.to(self.device),
-                        critic_obs.to(self.device),
-                        morph_obs.to(self.device),
-                        morph_target.to(self.device),
-                        rewards.to(self.device),
-                        dones.to(self.device),
-                    )
+                    obs, rewards, dones = obs.to(self.device), rewards.to(self.device), dones.to(self.device),
                     # perform normalization
                     obs = self.obs_normalizer(obs)
                     if "critic" in infos["observations"]:
-                        critic_obs = self.critic_obs_normalizer(infos["observations"]["critic"])
+                        critic_obs = self.critic_obs_normalizer(infos["observations"]["critic"].to(self.device))
                     else:
                         critic_obs = obs
-                    morph_obs = infos["observations"]["morph_obs"]
-                    morph_target = infos["observations"]["morph_target"]
+                    morph_obs = infos["observations"]["morph_obs"].to(self.device)
+                    morph_target = infos["observations"]["morph_target"].to(self.device)
+                    
+                    # update mean terrain level
+                    if "mean_level" in extras["observations"]:
+                        mean_level = infos["observations"]["mean_level"]
+                   
                     # process the step
                     self.alg.process_env_step(rewards, dones, infos)
 
@@ -261,6 +269,7 @@ class OnPolicyRunner:
                 f"""{'Mean action noise std:':>{pad}} {mean_std.item():.2f}\n"""
                 f"""{'Mean reward:':>{pad}} {statistics.mean(locs['rewbuffer']):.2f}\n"""
                 f"""{'Mean episode length:':>{pad}} {statistics.mean(locs['lenbuffer']):.2f}\n"""
+                f"""{'Mean terrain level:':>{pad}} {locs["mean_level"]}\n"""
             )
             #   f"""{'Mean reward/step:':>{pad}} {locs['mean_reward']:.2f}\n"""
             #   f"""{'Mean episode length/episode:':>{pad}} {locs['mean_trajectory_length']:.2f}\n""")
@@ -274,6 +283,7 @@ class OnPolicyRunner:
                 f"""{'Surrogate loss:':>{pad}} {locs['mean_surrogate_loss']:.4f}\n"""
                 f"""{'Regression loss:':>{pad}} {locs['mean_regression_loss']:.4f}\n"""
                 f"""{'Mean action noise std:':>{pad}} {mean_std.item():.2f}\n"""
+                f"""{'Mean terrain level:':>{pad}} {locs["mean_level"]}\n"""
             )
             #   f"""{'Mean reward/step:':>{pad}} {locs['mean_reward']:.2f}\n"""
             #   f"""{'Mean episode length/episode:':>{pad}} {locs['mean_trajectory_length']:.2f}\n""")

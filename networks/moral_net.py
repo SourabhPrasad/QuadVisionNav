@@ -24,7 +24,7 @@ class MorAL(nn.Module):
     ):
         if kwargs:
             print(
-                "ActorCritic.__init__ got unexpected arguments, which will be ignored: "
+                "MorALNet.__init__ got unexpected arguments, which will be ignored: "
                 + str([key for key in kwargs.keys()])
             )
         super().__init__()
@@ -114,10 +114,10 @@ class MorAL(nn.Module):
 
     def update_distribution(self, observations, morph_observations):
         # Get morph-net output
-        # updated_obs = observations
+        combined_obs = observations
         morph_est = self.morph(morph_observations)
-        updated_obs = torch.cat((observations, morph_est), dim=-1)
-        mean = self.actor(updated_obs)
+        combined_obs = torch.cat((observations, morph_est), dim=-1)
+        mean = self.actor(combined_obs)
         self.distribution = Normal(mean, mean * 0.0 + self.std)
 
     def act(self, observations, morph_observations, **kwargs):
@@ -128,10 +128,10 @@ class MorAL(nn.Module):
         return self.distribution.log_prob(actions).sum(dim=-1)
 
     def act_inference(self, observations, morph_observations):
-        # updated_obs = observations
+        combined_obs = observations
         morph_est = self.morph(morph_observations)
         updated_obs = torch.cat((observations, morph_est), dim=-1)
-        actions_mean = self.actor(updated_obs)
+        actions_mean = self.actor(combined_obs)
         return actions_mean
 
     def evaluate(self, critic_observations, **kwargs):

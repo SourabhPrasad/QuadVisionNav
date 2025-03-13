@@ -54,9 +54,10 @@ class MorALPPO:
         self.use_clipped_value_loss = use_clipped_value_loss
 
         # Training
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=learning_rate)
+        self.parameters = self.actor_critic.parameters()
+        self.optimizer = optim.Adam(self.parameters, lr=learning_rate)
         self.reg_loss_func = nn.MSELoss()
-        self.beta = 0.2
+        self.beta = 0.5
 
     def init_storage(
         self,
@@ -145,16 +146,19 @@ class MorALPPO:
             masks_batch,
         ) in generator:
             
+            # actor
             self.actor_critic.act(obs_batch, morph_obs_batch, masks=masks_batch, hidden_states=hid_states_batch[0])
             actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
+            # critic
             value_batch = self.actor_critic.evaluate(
                 critic_obs_batch, masks=masks_batch, hidden_states=hid_states_batch[1]
             )
+            # morph
+            morph_est_batch = self.actor_critic.morph_estimate(morph_obs_batch)
+            # entropy
             mu_batch = self.actor_critic.action_mean
             sigma_batch = self.actor_critic.action_std
             entropy_batch = self.actor_critic.entropy
-
-            morph_est_batch = self.actor_critic.morph_estimate(morph_obs_batch)
 
             # KL
             if self.desired_kl is not None and self.schedule == "adaptive":
@@ -198,18 +202,20 @@ class MorALPPO:
             # Total Loss calculated as per the paper
             loss_policy = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
             # morphology loss
-            morph_loss = self.reg_loss_func(morph_est_batch[:, :9], morph_target_batch[:, :9])
+            morph_loss = self.reg_loss_func(morph_est_batch[:, :9], morph_target_batch.detach()[:, :9])
             # velocity loss
-            vel_loss = self.reg_loss_func(morph_est_batch[:, 9:], morph_target_batch[:, 9:])
+            vel_loss = self.reg_loss_func(morph_est_batch[:, 9:], morph_target_batch.detach()[:, 9:])
             # total regression loss
             loss_reg = morph_loss + vel_loss
             # Total loss
-            loss = (self.beta * loss_reg) + ((1 - self.beta) * loss_policy)
+            morph_net_loss = self.beta * loss_reg + (1 - self.beta) * loss_policy
+            # loss = loss_policy + morph_net_loss
 
             # Gradient step
             self.optimizer.zero_grad()
-            loss.backward()
-            nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
+            loss_policy.backward(retain_graph=True)
+            morph_net_loss.backward()
+            nn.utils.clip_grad_norm_(self.parameters, self.max_grad_norm)
             self.optimizer.step()
 
             mean_value_loss += value_loss.item()
