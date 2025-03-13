@@ -31,21 +31,39 @@ class MoralEnv(DirectRLEnv):
             self.num_envs, gym.spaces.flatdim(self.single_action_space), device=self.device
         )
 
-        # tensor to store temporal observation (morph-net input)
+        # get curriculum status
+        self._curriculum_learning = False
+        self._mean_terrain_level = None
+        if cfg.terrain.terrain_type == "generator":
+            if cfg.terrain.terrain_generator.curriculum:
+                self._curriculum_learning = True
+
+
+        # store temporal observation (morph-net input)
+        # self._temporal_observations = torch.zeros(
+        #     self.num_envs,
+        #     self.cfg.temporal_buffer_size,
+        #     gym.spaces.flatdim(self.single_action_space) + gym.spaces.flatdim(self.single_observation_space["policy"]),
+        #     device=self.device
+        # )
         self._temporal_observations = torch.zeros(
             self.num_envs,
             self.cfg.temporal_buffer_size,
-            gym.spaces.flatdim(self.single_action_space) + gym.spaces.flatdim(self.single_observation_space),
+            gym.spaces.flatdim(self.single_observation_space["policy"]) + gym.spaces.flatdim(self.single_action_space),
             device=self.device
         )
 
-        # get morphology and actuator parameters
+
+        # store error between robot velocity and command velocity
+        self._velocity_error = torch.full((self.num_envs,), float('inf'), device=self.device)
+
+        # get ground-truth morphology and actuator parameters
         self._morphology = None
         self._actuator_gains = None
         with open(
             os.path.join(self.cfg.asset_dir, 'morphology_params.json'), 'r'
         ) as file:
-            # params = torch.Tensor(list((json.load(file).values()))[:self.num_envs])
+            # params = torch.Tensor(list((json.load(file).values()))[:self.num_envs]).to(device=self.device)
             params = torch.Tensor(list((json.load(file)['quadruped_87.usda']))).to(device=self.device)
             params = params.expand(self.num_envs, -1)
             # split morphology data and actuator gains
@@ -105,6 +123,7 @@ class MoralEnv(DirectRLEnv):
 
     def _get_observations(self) -> dict:
         self._previous_actions = self._actions.clone()
+        
         height_data = None
         if isinstance(self.cfg, MoralRoughEnvCfg):
             height_data = (
@@ -117,15 +136,18 @@ class MoralEnv(DirectRLEnv):
             torch.max(torch.norm(net_contact_forces[:, :, self._feet_ids], dim=-1), dim=1)[0] > 1.0
         ).to(self.device)
         feet_height = self._robot.data.body_pos_w[:, self._feet_ids][..., -1].to(self.device)
-
         # print(f"[DEBUG]: Feet Contact: {feet_contact}")
         # print(f"[DEBUG]: Feet Height: {feet_height}")
 
         # ground truth value for training morph-net
         morph_target = torch.cat(
             [
-                self._morphologies,
-                self._robot.data.root_lin_vel_b
+                tensor
+                for tensor in(
+                    self._morphologies,
+                    self._robot.data.root_lin_vel_b
+                )
+                if tensor is not None
             ],
             dim=-1
         )
@@ -135,7 +157,6 @@ class MoralEnv(DirectRLEnv):
             [
                 tensor
                 for tensor in (
-                    # self._robot.data.root_lin_vel_b,
                     self._robot.data.root_ang_vel_b,
                     self._robot.data.projected_gravity_b,
                     self._commands,
@@ -153,9 +174,8 @@ class MoralEnv(DirectRLEnv):
             [
                 tensor
                 for tensor in (
-                    self._robot.data.root_lin_vel_b,
                     policy_obs,
-                    self._morphologies,
+                    morph_target,
                     height_data,
                     feet_height,
                     feet_contact,
@@ -168,6 +188,8 @@ class MoralEnv(DirectRLEnv):
 
         # update temporal observation buffer with latest action and observation
         self._update_temporal_observations(torch.cat((policy_obs, self._actions), dim=-1))
+        # calculate velocity error 
+        # self._update_velocity_error(None)
 
         # print(f"[DEBUG] Policy: {policy_obs.shape}")
         # print(f"[DEBUG] Critic: {critic_obs.shape}")
@@ -178,7 +200,8 @@ class MoralEnv(DirectRLEnv):
             "policy": policy_obs,
             "critic": critic_obs,
             "morph_obs": self._temporal_observations.flatten(1, 2),
-            "morph_target": morph_target
+            "morph_target": morph_target,
+            "mean_level": self._mean_terrain_level,
         }
         return observations
 
@@ -234,28 +257,35 @@ class MoralEnv(DirectRLEnv):
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         time_out = self.episode_length_buf >= self.max_episode_length - 1
-        # net_contact_forces = self._contact_sensor.data.net_forces_w_history
-        # died = torch.any(torch.max(torch.norm(net_contact_forces[:, :, self._base_id], dim=-1), dim=1)[0] > 1.0, dim=1)
-        up_vector = torch.tensor([0.0, 0.0, 1.0], device=self.device).expand(self.num_envs, 3)
-        up_vector = math_utils.quat_rotate(self._robot.data.root_quat_w, up_vector)
-        tilt_angle = torch.acos(up_vector[:, 2])
-        died = tilt_angle > math.pi / 3  # 60 degrees
+        net_contact_forces = self._contact_sensor.data.net_forces_w_history
+        died = torch.any(torch.max(torch.norm(net_contact_forces[:, :, self._base_id], dim=-1), dim=1)[0] > 1.0, dim=1)
+        # up_vector = torch.tensor([0.0, 0.0, 1.0], device=self.device).expand(self.num_envs, 3)
+        # up_vector = math_utils.quat_rotate(self._robot.data.root_quat_w, up_vector)
+        # tilt_angle = torch.acos(up_vector[:, 2])
+        # died = tilt_angle > math.pi / 3  # 60 degrees
         
         return died, time_out
 
     def _reset_idx(self, env_ids: torch.Tensor | None):
         if env_ids is None or len(env_ids) == self.num_envs:
             env_ids = self._robot._ALL_INDICES
-        self._robot.reset(env_ids)
         super()._reset_idx(env_ids)
+        
+        if isinstance(self.cfg, MoralRoughEnvCfg):
+            self._set_curriculum_lvl(env_ids)
+        self._robot.reset(env_ids)
+        
         if len(env_ids) == self.num_envs:
             # Spread out the resets to avoid spikes in training when many environments reset at a similar time
             self.episode_length_buf[:] = torch.randint_like(self.episode_length_buf, high=int(self.max_episode_length))
+        
         self._actions[env_ids] = 0.0
         self._previous_actions[env_ids] = 0.0
         self._temporal_observations[env_ids] = 0.0
+        
         # Sample new commands
         self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-1.0, 1.0)
+        
         # Reset robot state
         joint_pos = self._robot.data.default_joint_pos[env_ids]
         joint_vel = self._robot.data.default_joint_vel[env_ids]
@@ -264,6 +294,7 @@ class MoralEnv(DirectRLEnv):
         self._robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
         self._robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
+        
         # Logging
         extras = dict()
         for key in self._episode_sums.keys():
@@ -277,9 +308,35 @@ class MoralEnv(DirectRLEnv):
         extras["Episode_Termination/time_out"] = torch.count_nonzero(self.reset_time_outs[env_ids]).item()
         self.extras["log"].update(extras)
 
-    def _update_temporal_observations(self, latest_observation):
+    def _update_temporal_observations(self, latest_observation: torch.Tensor) -> None:
         self._temporal_observations[:, :-1] = self._temporal_observations[:, 1:]
         self._temporal_observations[:, -1] = latest_observation
 
-
+    def _set_curriculum_lvl(self, env_ids: torch.Tensor | None) -> None:
+        move_up = self._velocity_error[env_ids] < self.cfg.velocity_cmd_threshold
+        move_down = self._velocity_error[env_ids] > self.cfg.velocity_cmd_threshold
+        move_down *= ~move_up
+        # self._terrain.update_env_origins(env_ids, move_up, move_down)
+        # if the robot solves the most difficult terrain, it stays there
+        self._terrain.terrain_levels[env_ids] += 1 * move_up.int() - 1 * move_down.int()
+        self._terrain.terrain_levels[env_ids] = torch.clamp(
+            self._terrain.terrain_levels[env_ids],
+            min=0,
+            max=self._terrain.max_terrain_level-1,
+        )
+        self._terrain.env_origins[env_ids] = self._terrain.terrain_origins[
+            self._terrain.terrain_levels[env_ids],
+            self._terrain.terrain_types[env_ids]
+        ]
+        
+        self._mean_terrain_level = torch.mean(self._terrain.terrain_levels.float())
     
+    def _update_velocity_error(self) -> None:
+        env_ids = self._robot._ALL_INDICES
+        # get current linear and angular velocity
+        current_lin_vel = self._robot.data.root_lin_vel_b[env_ids, :2]
+        current_ang_vel = self._robot.data.root_ang_vel_b[env_ids, 2].unsqueeze(dim=-1)
+        current_vel = torch.cat([current_lin_vel, current_ang_vel], dim=-1,)
+    
+        self._velocity_error = torch.sum(torch.square(self._commands - current_vel), dim=1)
+
