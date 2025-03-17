@@ -6,6 +6,8 @@ from __future__ import annotations
 import os
 import statistics
 import time
+import numpy as np
+import matplotlib.pyplot as plt
 import torch
 from collections import deque
 from torch.utils.tensorboard import SummaryWriter as TensorboardSummaryWriter
@@ -81,6 +83,8 @@ class OnPolicyRunner:
         self.tot_time = 0
         self.current_learning_iteration = 0
         self.git_status_repos = [rsl_rl.__file__]
+        # create folder for graphs
+        os.makedirs(os.path.join(self.log_dir, "graphs"), exist_ok=True)
 
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False):
         # initialize writer
@@ -126,6 +130,12 @@ class OnPolicyRunner:
 
         start_iter = self.current_learning_iteration
         tot_iter = start_iter + num_learning_iterations
+
+        # store data for plotting
+        losses_histrory = np.empty((tot_iter, 3))   # value loss, surrogate loss, regression loss
+        rewards_histrory = np.empty((tot_iter, 1))  # mean reward
+        episode_length_histrory = np.empty((tot_iter, 1))  # mean episode length
+
         for it in range(start_iter, tot_iter):
             start = time.time()
             # Rollout
@@ -177,9 +187,15 @@ class OnPolicyRunner:
                 self.alg.compute_returns(critic_obs)
 
             mean_value_loss, mean_surrogate_loss, mean_regression_loss = self.alg.update()
-            mean_reward = statistics.mean(rewbuffer)
             stop = time.time()
             learn_time = stop - start
+            
+            # store losses, mean and episode length
+            losses_histrory[it, :] = [mean_value_loss, mean_surrogate_loss, mean_regression_loss]
+            episode_length_histrory[it] = statistics.mean(lenbuffer)
+            mean_reward = statistics.mean(rewbuffer)
+            rewards_histrory[it] = mean_reward
+            
             self.current_learning_iteration = it
             if self.log_dir is not None:
                 self.log(locals())
@@ -189,6 +205,14 @@ class OnPolicyRunner:
                 self.save(os.path.join(self.log_dir, f"model_best.pt"))
             if it % self.save_interval == 0:
                 self.save(os.path.join(self.log_dir, f"model_{it}.pt"))
+                # generate intermediate plots
+                self.plot(
+                    start_iter,
+                    it, 
+                    losses_histrory, 
+                    rewards_histrory, 
+                    episode_length_histrory
+                )
             ep_infos.clear()
             if it == start_iter:
                 # obtain all the diff files
@@ -197,9 +221,26 @@ class OnPolicyRunner:
                 if self.logger_type in ["wandb", "neptune"] and git_file_paths:
                     for path in git_file_paths:
                         self.writer.save_file(path)
-
+        
+        print(f"Training finished after {tot_iter} iterations.")
         self.save(os.path.join(self.log_dir, f"model_{self.current_learning_iteration}.pt"))
         print(f"Highest Mean Reward: {highest_mean_reward}")
+        print("Generating final plots...")
+        # generate final plots
+        self.plot(
+            start_iter,
+            self.current_learning_iteration, 
+            losses_histrory, 
+            rewards_histrory, 
+            episode_length_histrory
+        )
+        # x_points = np.arange(start_iter, tot_iter)
+        # plt.plot(x_points, losses_histrory[:, 0], label="Value Loss")
+        # plt.plot(x_points, losses_histrory[:, 1], label="Surrogate Loss")
+        # plt.plot(x_points, losses_histrory[:, 2], label="Regression Loss")
+        # plt.legend()
+        # plt.savefig(os.path.join(self.log_dir, "graphs/losses.png"))
+        # plt.clf()
 
     def log(self, locs: dict, width: int = 80, pad: int = 35):
         self.tot_timesteps += self.num_steps_per_env * self.env.num_envs
@@ -292,8 +333,10 @@ class OnPolicyRunner:
     def save(self, path, infos=None):
         saved_dict = {
             "model_state_dict": self.alg.actor_critic.state_dict(),
-            "optimizer_state_dict": self.alg.optimizer.state_dict(),
+            "optimizer_state_dict": self.alg.ppo_optimizer.state_dict(),
+            "moprh_optimizer_state_dict": self.alg.reg_optimizer.state_dict(),
             "iter": self.current_learning_iteration,
+            ""
             "infos": infos,
         }
         if self.empirical_normalization:
@@ -341,3 +384,13 @@ class OnPolicyRunner:
 
     def add_git_repo_to_log(self, repo_file_path):
         self.git_status_repos.append(repo_file_path)
+
+    def plot(self, start_iter, curr_iter, losses_histrory, rewards_histrory, episode_length_histrory):
+        """Generate plots of losses, rewards and episode length."""
+        x_points = np.arange(start_iter, curr_iter + 1)
+        plt.plot(x_points, losses_histrory[:curr_iter+1, 0].T, label="Value Loss")
+        plt.plot(x_points, losses_histrory[:curr_iter+1, 1].T, label="Surrogate Loss")
+        plt.plot(x_points, losses_histrory[:curr_iter+1, 2].T, label="Regression Loss")
+        plt.legend()
+        plt.savefig(os.path.join(self.log_dir, "graphs/losses.png"))
+        plt.close()
