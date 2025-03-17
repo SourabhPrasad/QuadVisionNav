@@ -54,9 +54,19 @@ class MorALPPO:
         self.use_clipped_value_loss = use_clipped_value_loss
 
         # Training
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=learning_rate)
+        self.morph_parameters = []
+        self.ppo_paremeters = []
+        for name, parameter in self.actor_critic.named_parameters():
+            if 'morph' in name:
+                self.morph_parameters.append(parameter)
+            else:
+                self.ppo_paremeters.append(parameter)
+        
+        self.ppo_optimizer = optim.Adam(self.ppo_paremeters, lr=learning_rate)
+        self.reg_optimizer = optim.Adam(self.morph_parameters, lr=learning_rate)
+
         self.reg_loss_func = nn.MSELoss()
-        self.beta = 0.2
+        self.beta = 0.7
 
     def init_storage(
         self,
@@ -173,7 +183,7 @@ class MorALPPO:
                     elif kl_mean < self.desired_kl / 2.0 and kl_mean > 0.0:
                         self.learning_rate = min(1e-2, self.learning_rate * 1.5)
 
-                    for param_group in self.optimizer.param_groups:
+                    for param_group in self.ppo_optimizer.param_groups:
                         param_group["lr"] = self.learning_rate
 
             # Surrogate loss
@@ -195,22 +205,31 @@ class MorALPPO:
             else:
                 value_loss = (returns_batch - value_batch).pow(2).mean()
 
-            # Total Loss calculated as per the paper
-            loss_policy = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
+            # PPO loss
+            ppo_loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
+            
+            # reg_loss_func = MSE loss
             # morphology loss
-            morph_loss = self.reg_loss_func(morph_est_batch[:, :9], morph_target_batch[:, :9])
+            morph_loss = self.reg_loss_func(morph_est_batch[:, :9], morph_target_batch[:, :9].detach())
             # velocity loss
-            vel_loss = self.reg_loss_func(morph_est_batch[:, 9:], morph_target_batch[:, 9:])
-            # total regression loss
+            vel_loss = self.reg_loss_func(morph_est_batch[:, 9:], morph_target_batch[:, 9:].detach())
+            # regression loss
             loss_reg = morph_loss + vel_loss
-            # Total loss
-            loss = (self.beta * loss_reg) + ((1 - self.beta) * loss_policy)
-
+            # morph-net loss
+            morph_net_loss = self.beta * loss_reg + (1 - self.beta) * surrogate_loss
+            
             # Gradient step
-            self.optimizer.zero_grad()
-            loss.backward()
+            # optimizer for actor and critic parameters (Adam)
+            self.ppo_optimizer.zero_grad()
+            # optimizer for morph-net parameters (Adam)
+            self.reg_optimizer.zero_grad()
+            
+            ppo_loss.backward(retain_graph=True)
+            morph_net_loss.backward()
+            
             nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
-            self.optimizer.step()
+            self.ppo_optimizer.step()
+            self.reg_optimizer.step()
 
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
