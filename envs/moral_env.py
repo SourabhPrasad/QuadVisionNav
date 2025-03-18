@@ -40,19 +40,12 @@ class MoralEnv(DirectRLEnv):
 
 
         # store temporal observation (morph-net input)
-        # self._temporal_observations = torch.zeros(
-        #     self.num_envs,
-        #     self.cfg.temporal_buffer_size,
-        #     gym.spaces.flatdim(self.single_action_space) + gym.spaces.flatdim(self.single_observation_space["policy"]),
-        #     device=self.device
-        # )
         self._temporal_observations = torch.zeros(
             self.num_envs,
             self.cfg.temporal_buffer_size,
             gym.spaces.flatdim(self.single_observation_space["policy"]) + gym.spaces.flatdim(self.single_action_space),
             device=self.device
         )
-
 
         # store error between robot velocity and command velocity
         self._velocity_error = torch.full((self.num_envs,), float('inf'), device=self.device)
@@ -63,9 +56,9 @@ class MoralEnv(DirectRLEnv):
         with open(
             os.path.join(self.cfg.asset_dir, 'morphology_params.json'), 'r'
         ) as file:
-            # params = torch.Tensor(list((json.load(file).values()))[:self.num_envs]).to(device=self.device)
-            params = torch.Tensor(list((json.load(file)['quadruped_87.usda']))).to(device=self.device)
-            params = params.expand(self.num_envs, -1)
+            params = torch.Tensor(list((json.load(file).values()))[:self.num_envs]).to(device=self.device)
+            # params = torch.Tensor(list((json.load(file)['quadruped_87.usda']))).to(device=self.device)
+            # params = params.expand(self.num_envs, -1)
             # split morphology data and actuator gains
             self._morphologies = params[:, :9]
             self._actuator_gains = params[:, 9:]
@@ -136,27 +129,26 @@ class MoralEnv(DirectRLEnv):
             torch.max(torch.norm(net_contact_forces[:, :, self._feet_ids], dim=-1), dim=1)[0] > 1.0
         ).to(self.device)
         feet_height = self._robot.data.body_pos_w[:, self._feet_ids][..., -1].to(self.device)
-        # print(f"[DEBUG]: Feet Contact: {feet_contact}")
-        # print(f"[DEBUG]: Feet Height: {feet_height}")
 
         # ground truth value for training morph-net
-        morph_target = torch.cat(
-            [
-                tensor
-                for tensor in(
-                    self._morphologies,
-                    self._robot.data.root_lin_vel_b
-                )
-                if tensor is not None
-            ],
-            dim=-1
-        )
+        # morph_target = torch.cat(
+        #     [
+        #         tensor
+        #         for tensor in(
+        #             self._morphologies,
+        #             # self._robot.data.root_lin_vel_b
+        #         )
+        #         if tensor is not None
+        #     ],
+        #     dim=-1
+        # )
 
         # actor observations
         policy_obs = torch.cat(
             [
                 tensor
                 for tensor in (
+                    self._robot.data.root_lin_vel_b,
                     self._robot.data.root_ang_vel_b,
                     self._robot.data.projected_gravity_b,
                     self._commands,
@@ -169,13 +161,15 @@ class MoralEnv(DirectRLEnv):
             dim=-1,
         )
 
+        policy_obs_temporal = torch.cat([policy_obs, self._temporal_observations.flatten(1, 2)], dim=-1)
+
         # critic observation
         critic_obs = torch.cat(
             [
                 tensor
                 for tensor in (
                     policy_obs,
-                    morph_target,
+                    self._morphologies,
                     height_data,
                     feet_height,
                     feet_contact,
@@ -197,10 +191,10 @@ class MoralEnv(DirectRLEnv):
         # print(f"[DEBUG] Temporal: {self._temporal_observations.flatten(1, 2).shape}")
 
         observations = {
-            "policy": policy_obs,
+            "policy": policy_obs_temporal,
             "critic": critic_obs,
-            "morph_obs": self._temporal_observations.flatten(1, 2),
-            "morph_target": morph_target,
+            # "morph_obs": self._temporal_observations.flatten(1, 2),
+            # "morph_target": morph_target,
             "mean_level": self._mean_terrain_level,
         }
         return observations
