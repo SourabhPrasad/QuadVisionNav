@@ -1,19 +1,13 @@
-#  Copyright 2021 ETH Zurich, NVIDIA CORPORATION
-#  SPDX-License-Identifier: BSD-3-Clause
-
 from __future__ import annotations
 
 import os
 import statistics
 import time
-import numpy as np
-import matplotlib.pyplot as plt
 import torch
 from collections import deque
 from torch.utils.tensorboard import SummaryWriter as TensorboardSummaryWriter
 
 import rsl_rl
-from rsl_rl.algorithms import PPO
 from rsl_rl.env import VecEnv
 from rsl_rl.modules import EmpiricalNormalization
 from rsl_rl.utils import store_code_state
@@ -21,40 +15,43 @@ from rsl_rl.utils import store_code_state
 from .moral_net import MorAL
 from .moral_ppo import MorALPPO
 
-class OnPolicyRunner:
+
+class MoralRunner:
     """On-policy runner for training and evaluation."""
 
     def __init__(self, env: VecEnv, train_cfg, log_dir=None, device="cpu"):
+        print("[INFO] USING MORAL RUNNER")
+        # get configurations
         self.cfg = train_cfg
         self.alg_cfg = train_cfg["algorithm"]
         self.policy_cfg = train_cfg["policy"]
         self.device = device
         self.env = env
 
-        # Input dims for actor, critic and morph nets
+        # input dims for actor, critic and morph nets
         obs, extras = self.env.get_observations()
         num_obs = obs.shape[1]
         if "critic" in extras["observations"]:
             num_critic_obs = extras["observations"]["critic"].shape[1]
         else:
             num_critic_obs = num_obs
-        
         if "morph_obs" in extras["observations"] and "morph_target" in extras["observations"]:
             num_morph_obs = extras["observations"]["morph_obs"].shape[1]
             num_morph_target = extras["observations"]["morph_target"].shape[1]
         else:
-            raise Exception("Morph-Net observations/target missing")
-        
-        # Network
-        actor_critic_class = eval(self.policy_cfg.pop("class_name"))  # MorAL
+            raise Exception("MorAL requires morph_obs and morph_target in the observation dictionary.")
+
+        # initialize network
+        actor_critic_class = eval(self.policy_cfg.pop("class_name"))
         actor_critic: MorAL = actor_critic_class(
             num_obs, num_critic_obs, num_morph_obs, self.env.num_actions, **self.policy_cfg
         ).to(self.device)
-
-        # Algorithm
-        alg_class = eval(self.alg_cfg.pop("class_name"))  # MorALPPO
+        
+        # initialize algorithm
+        alg_class = eval(self.alg_cfg.pop("class_name"))
         self.alg: MorALPPO = alg_class(actor_critic, device=self.device, **self.alg_cfg)
-
+        
+        # hyperparameters
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
         self.save_interval = self.cfg["save_interval"]
         self.empirical_normalization = self.cfg["empirical_normalization"]
@@ -83,8 +80,6 @@ class OnPolicyRunner:
         self.tot_time = 0
         self.current_learning_iteration = 0
         self.git_status_repos = [rsl_rl.__file__]
-        # create folder for graphs
-        os.makedirs(os.path.join(self.log_dir, "graphs"), exist_ok=True)
 
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False):
         # initialize writer
@@ -122,44 +117,38 @@ class OnPolicyRunner:
         self.train_mode()  # switch to train mode (for dropout for example)
 
         ep_infos = []
-        highest_mean_reward = float('-inf')
         rewbuffer = deque(maxlen=100)
         lenbuffer = deque(maxlen=100)
         cur_reward_sum = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
         cur_episode_length = torch.zeros(self.env.num_envs, dtype=torch.float, device=self.device)
+        highest_mean_reward = float('-inf')
 
         start_iter = self.current_learning_iteration
         tot_iter = start_iter + num_learning_iterations
-
-        # store data for plotting
-        losses_histrory = np.empty((tot_iter, 3))   # value loss, surrogate loss, regression loss
-        rewards_histrory = np.empty((tot_iter, 1))  # mean reward
-        episode_length_histrory = np.empty((tot_iter, 1))  # mean episode length
-
         for it in range(start_iter, tot_iter):
             start = time.time()
             # Rollout
             with torch.inference_mode():
                 for i in range(self.num_steps_per_env):
+                    # sample actions from policy
                     actions = self.alg.act(obs, critic_obs, morph_obs, morph_target)
+                    # Step environment
                     obs, rewards, dones, infos = self.env.step(actions.to(self.env.device))
-                    # move to the right device
-                    obs, critic_obs, morph_obs, morph_target, rewards, dones = (
-                        obs.to(self.device),
-                        critic_obs.to(self.device),
-                        morph_obs.to(self.device),
-                        morph_target.to(self.device),
-                        rewards.to(self.device),
-                        dones.to(self.device),
-                    )
+
+                    # Move to the agent device
+                    obs, rewards, dones = obs.to(self.device), rewards.to(self.device), dones.to(self.device)
+
+                    # update morph_obs and morph_target
+                    morph_obs = infos["observations"]["morph_obs"].to(self.device)
+                    morph_target = infos["observations"]["morph_target"].to(self.device)
+                    
                     # perform normalization
                     obs = self.obs_normalizer(obs)
                     if "critic" in infos["observations"]:
                         critic_obs = self.critic_obs_normalizer(infos["observations"]["critic"])
                     else:
                         critic_obs = obs
-                    morph_obs = infos["observations"]["morph_obs"]
-                    morph_target = infos["observations"]["morph_target"]
+                    
                     # process the step
                     self.alg.process_env_step(rewards, dones, infos)
 
@@ -173,6 +162,8 @@ class OnPolicyRunner:
                             ep_infos.append(infos["log"])
                         cur_reward_sum += rewards
                         cur_episode_length += 1
+                        
+                        # clear data for completed episodes
                         new_ids = (dones > 0).nonzero(as_tuple=False)
                         rewbuffer.extend(cur_reward_sum[new_ids][:, 0].cpu().numpy().tolist())
                         lenbuffer.extend(cur_episode_length[new_ids][:, 0].cpu().numpy().tolist())
@@ -186,34 +177,26 @@ class OnPolicyRunner:
                 start = stop
                 self.alg.compute_returns(critic_obs)
 
+            # Update policy
             mean_value_loss, mean_surrogate_loss, mean_regression_loss = self.alg.update()
+            mean_reward = statistics.mean(rewbuffer)
             stop = time.time()
             learn_time = stop - start
-            
-            # store losses, mean and episode length
-            losses_histrory[it, :] = [mean_value_loss, mean_surrogate_loss, mean_regression_loss]
-            episode_length_histrory[it] = statistics.mean(lenbuffer)
-            mean_reward = statistics.mean(rewbuffer)
-            rewards_histrory[it] = mean_reward
-            
             self.current_learning_iteration = it
+            
+            # Logging info and save checkpoint
             if self.log_dir is not None:
                 self.log(locals())
+            
             if mean_reward > highest_mean_reward:
                 print(f"[INFO]: Saving current best model with reward: {mean_reward}")
                 highest_mean_reward = mean_reward
                 self.save(os.path.join(self.log_dir, f"model_best.pt"))
+            
             if it % self.save_interval == 0:
                 self.save(os.path.join(self.log_dir, f"model_{it}.pt"))
-                # generate intermediate plots
-                self.plot(
-                    start_iter,
-                    it, 
-                    losses_histrory, 
-                    rewards_histrory, 
-                    episode_length_histrory
-                )
             ep_infos.clear()
+            
             if it == start_iter:
                 # obtain all the diff files
                 git_file_paths = store_code_state(self.log_dir, self.git_status_repos)
@@ -221,26 +204,10 @@ class OnPolicyRunner:
                 if self.logger_type in ["wandb", "neptune"] and git_file_paths:
                     for path in git_file_paths:
                         self.writer.save_file(path)
-        
+
         print(f"Training finished after {tot_iter} iterations.")
         self.save(os.path.join(self.log_dir, f"model_{self.current_learning_iteration}.pt"))
         print(f"Highest Mean Reward: {highest_mean_reward}")
-        print("Generating final plots...")
-        # generate final plots
-        self.plot(
-            start_iter,
-            self.current_learning_iteration, 
-            losses_histrory, 
-            rewards_histrory, 
-            episode_length_histrory
-        )
-        # x_points = np.arange(start_iter, tot_iter)
-        # plt.plot(x_points, losses_histrory[:, 0], label="Value Loss")
-        # plt.plot(x_points, losses_histrory[:, 1], label="Surrogate Loss")
-        # plt.plot(x_points, losses_histrory[:, 2], label="Regression Loss")
-        # plt.legend()
-        # plt.savefig(os.path.join(self.log_dir, "graphs/losses.png"))
-        # plt.clf()
 
     def log(self, locs: dict, width: int = 80, pad: int = 35):
         self.tot_timesteps += self.num_steps_per_env * self.env.num_envs
@@ -333,10 +300,8 @@ class OnPolicyRunner:
     def save(self, path, infos=None):
         saved_dict = {
             "model_state_dict": self.alg.actor_critic.state_dict(),
-            "optimizer_state_dict": self.alg.ppo_optimizer.state_dict(),
-            "moprh_optimizer_state_dict": self.alg.reg_optimizer.state_dict(),
+            "optimizer_state_dict": self.alg.optimizer.state_dict(),
             "iter": self.current_learning_iteration,
-            ""
             "infos": infos,
         }
         if self.empirical_normalization:
@@ -384,13 +349,3 @@ class OnPolicyRunner:
 
     def add_git_repo_to_log(self, repo_file_path):
         self.git_status_repos.append(repo_file_path)
-
-    def plot(self, start_iter, curr_iter, losses_histrory, rewards_histrory, episode_length_histrory):
-        """Generate plots of losses, rewards and episode length."""
-        x_points = np.arange(start_iter, curr_iter + 1)
-        plt.plot(x_points, losses_histrory[:curr_iter+1, 0].T, label="Value Loss")
-        plt.plot(x_points, losses_histrory[:curr_iter+1, 1].T, label="Surrogate Loss")
-        plt.plot(x_points, losses_histrory[:curr_iter+1, 2].T, label="Regression Loss")
-        plt.legend()
-        plt.savefig(os.path.join(self.log_dir, "graphs/losses.png"))
-        plt.close()

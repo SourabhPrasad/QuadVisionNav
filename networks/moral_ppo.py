@@ -4,14 +4,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from rsl_rl.modules import ActorCritic
-# from rsl_rl.storage import RolloutStorage
-
-from .moral_net import MorAL
 from .moral_storage import MoralRolloutStorage
+from .moral_net import MorAL
+
 
 class MorALPPO:
-    actor_critic: ActorCritic | MorAL
+    actor_critic: MorAL
 
     def __init__(
         self,
@@ -30,6 +28,7 @@ class MorALPPO:
         desired_kl=0.01,
         device="cpu",
     ):
+        print("[INFO] USING NEW PPO")
         self.device = device
 
         self.desired_kl = desired_kl
@@ -40,6 +39,8 @@ class MorALPPO:
         self.actor_critic = actor_critic
         self.actor_critic.to(self.device)
         self.storage = None  # initialized later
+        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=learning_rate)
+        self.beta = 0.5
         self.transition = MoralRolloutStorage.Transition()
 
         # PPO parameters
@@ -52,21 +53,6 @@ class MorALPPO:
         self.lam = lam
         self.max_grad_norm = max_grad_norm
         self.use_clipped_value_loss = use_clipped_value_loss
-
-        # Training
-        self.morph_parameters = []
-        self.ppo_paremeters = []
-        for name, parameter in self.actor_critic.named_parameters():
-            if 'morph' in name:
-                self.morph_parameters.append(parameter)
-            else:
-                self.ppo_paremeters.append(parameter)
-        
-        self.ppo_optimizer = optim.Adam(self.ppo_paremeters, lr=learning_rate)
-        self.reg_optimizer = optim.Adam(self.morph_parameters, lr=learning_rate)
-
-        self.reg_loss_func = nn.MSELoss()
-        self.beta = 0.7
 
     def init_storage(
         self,
@@ -98,17 +84,20 @@ class MorALPPO:
     def act(self, obs, critic_obs, morph_obs, morph_target):
         if self.actor_critic.is_recurrent:
             self.transition.hidden_states = self.actor_critic.get_hidden_states()
+        
         # Compute the actions and values
         self.transition.actions = self.actor_critic.act(obs, morph_obs).detach()
         self.transition.values = self.actor_critic.evaluate(critic_obs).detach()
         self.transition.actions_log_prob = self.actor_critic.get_actions_log_prob(self.transition.actions).detach()
         self.transition.action_mean = self.actor_critic.action_mean.detach()
         self.transition.action_sigma = self.actor_critic.action_std.detach()
-        # need to record obs and critic_obs before env.step()
+        
+        # need to record obs, critic_obs, morph_obs and morph_target before env.step()
         self.transition.observations = obs
         self.transition.critic_observations = critic_obs
-        self.transition.morph_observation = morph_obs
-        self.transition.morph_target = morph_target
+        self.transition.morph_observations = morph_obs
+        self.transition.morph_targets = morph_target
+        
         return self.transition.actions
 
     def process_env_step(self, rewards, dones, infos):
@@ -132,7 +121,7 @@ class MorALPPO:
     def update(self):
         mean_value_loss = 0
         mean_surrogate_loss = 0
-        mean_morph_net_loss = 0
+        mean_regression_loss = 0
         
         if self.actor_critic.is_recurrent:
             generator = self.storage.reccurent_mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
@@ -154,17 +143,19 @@ class MorALPPO:
             hid_states_batch,
             masks_batch,
         ) in generator:
-            
+            # actor
             self.actor_critic.act(obs_batch, morph_obs_batch, masks=masks_batch, hidden_states=hid_states_batch[0])
             actions_log_prob_batch = self.actor_critic.get_actions_log_prob(actions_batch)
+            # critic
             value_batch = self.actor_critic.evaluate(
                 critic_obs_batch, masks=masks_batch, hidden_states=hid_states_batch[1]
             )
+            # morph-net
+            morph_batch = self.actor_critic.morph_estimate(morph_obs_batch)
+
             mu_batch = self.actor_critic.action_mean
             sigma_batch = self.actor_critic.action_std
             entropy_batch = self.actor_critic.entropy
-
-            morph_est_batch = self.actor_critic.morph_estimate(morph_obs_batch)
 
             # KL
             if self.desired_kl is not None and self.schedule == "adaptive":
@@ -183,7 +174,7 @@ class MorALPPO:
                     elif kl_mean < self.desired_kl / 2.0 and kl_mean > 0.0:
                         self.learning_rate = min(1e-2, self.learning_rate * 1.5)
 
-                    for param_group in self.ppo_optimizer.param_groups:
+                    for param_group in self.optimizer.param_groups:
                         param_group["lr"] = self.learning_rate
 
             # Surrogate loss
@@ -204,42 +195,32 @@ class MorALPPO:
                 value_loss = torch.max(value_losses, value_losses_clipped).mean()
             else:
                 value_loss = (returns_batch - value_batch).pow(2).mean()
-
+            
             # PPO loss
             ppo_loss = surrogate_loss + self.value_loss_coef * value_loss - self.entropy_coef * entropy_batch.mean()
-            
-            # reg_loss_func = MSE loss
-            # morphology loss
-            morph_loss = self.reg_loss_func(morph_est_batch[:, :9], morph_target_batch[:, :9].detach())
-            # velocity loss
-            vel_loss = self.reg_loss_func(morph_est_batch[:, 9:], morph_target_batch[:, 9:].detach())
-            # regression loss
-            loss_reg = morph_loss + vel_loss
             # morph-net loss
-            morph_net_loss = self.beta * loss_reg + (1 - self.beta) * surrogate_loss
-            
+            reg_loss_func = torch.nn.MSELoss()
+            morph_loss = reg_loss_func(morph_batch[:, :9], morph_target_batch.detach()[:, :9])
+            velocity_loss = reg_loss_func(morph_batch[:, 9:], morph_target_batch.detach()[:, 9:])
+            reg_loss = morph_loss + velocity_loss
+            morph_net_loss = self.beta * reg_loss + (1 - self.beta) * surrogate_loss
+            # total loss
+            loss = ppo_loss + morph_net_loss
+
             # Gradient step
-            # optimizer for actor and critic parameters (Adam)
-            self.ppo_optimizer.zero_grad()
-            # optimizer for morph-net parameters (Adam)
-            self.reg_optimizer.zero_grad()
-            
-            ppo_loss.backward(retain_graph=True)
-            morph_net_loss.backward()
-            
+            self.optimizer.zero_grad()
+            loss.backward()
             nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
-            self.ppo_optimizer.step()
-            self.reg_optimizer.step()
+            self.optimizer.step()
 
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
-            mean_morph_net_loss += loss_reg.item()
-
+            mean_regression_loss += reg_loss.item()
 
         num_updates = self.num_learning_epochs * self.num_mini_batches
         mean_value_loss /= num_updates
         mean_surrogate_loss /= num_updates
-        mean_morph_net_loss /= num_updates
+        mean_regression_loss /= num_updates
         self.storage.clear()
 
-        return mean_value_loss, mean_surrogate_loss, mean_morph_net_loss
+        return mean_value_loss, mean_surrogate_loss, mean_regression_loss

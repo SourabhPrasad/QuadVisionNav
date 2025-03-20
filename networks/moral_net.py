@@ -1,9 +1,9 @@
-
 from __future__ import annotations
 
 import torch
 import torch.nn as nn
 from torch.distributions import Normal
+
 
 class MorAL(nn.Module):
     is_recurrent = False
@@ -22,12 +22,13 @@ class MorAL(nn.Module):
         init_noise_std=1.0,
         **kwargs,
     ):
-        if kwargs:
-            print(
-                "ActorCritic.__init__ got unexpected arguments, which will be ignored: "
-                + str([key for key in kwargs.keys()])
-            )
+        # if kwargs:
+        #     print(
+        #         "MorAL_Net.__init__ got unexpected arguments, which will be ignored: "
+        #         + str([key for key in kwargs.keys()])
+        #     )
         super().__init__()
+        print("[INFO] USING MORAL NETWORK")
         actor_critic_activation = get_activation(actor_critic_activation)
         morph_activation = get_activation(morph_activations)
 
@@ -61,12 +62,12 @@ class MorAL(nn.Module):
 
         # Morph Net
         morph_layers = []
-        print(f"Morp Input Dim: {mlp_input_dim_m} || Hidden Layer 1: {morph_hidden_dims[0]}")
         morph_layers.append(nn.Linear(mlp_input_dim_m, morph_hidden_dims[0]))
         morph_layers.append(morph_activation)
         for layer_index in range(len(morph_hidden_dims)):
             if layer_index == len(morph_hidden_dims) - 1:
-                morph_layers.append(nn.Linear(morph_hidden_dims[layer_index], 12)) #Output: estimated velocity(R3) and morphology(R9)
+                # output: morphology(R9) and estimated velocity(R3)
+                morph_layers.append(nn.Linear(morph_hidden_dims[layer_index], 12))
             else:
                 morph_layers.append(nn.Linear(morph_hidden_dims[layer_index], morph_hidden_dims[layer_index + 1]))
                 morph_layers.append(morph_activation)
@@ -113,12 +114,13 @@ class MorAL(nn.Module):
         return self.distribution.entropy().sum(dim=-1)
 
     def update_distribution(self, observations, morph_observations):
-        # Get morph-net output
-        # updated_obs = observations
-        morph_est = self.morph(morph_observations)
-        updated_obs = torch.cat((observations, morph_est), dim=-1)
-        mean = self.actor(updated_obs)
-        self.distribution = Normal(mean, mean * 0.0 + self.std)
+        # get morph-net estimate and concatenate with observations
+        estimate = self.morph(morph_observations)
+        combined_obs = torch.cat((observations, estimate), dim=-1)
+        
+        mean = self.actor(combined_obs)
+        std = self.std.expand_as(mean)
+        self.distribution = Normal(mean, std)
 
     def act(self, observations, morph_observations, **kwargs):
         self.update_distribution(observations, morph_observations)
@@ -126,21 +128,20 @@ class MorAL(nn.Module):
 
     def get_actions_log_prob(self, actions):
         return self.distribution.log_prob(actions).sum(dim=-1)
+    
+    def morph_estimate(self, morph_observations):
+        return self.morph(morph_observations)
 
     def act_inference(self, observations, morph_observations):
-        # updated_obs = observations
-        morph_est = self.morph(morph_observations)
-        updated_obs = torch.cat((observations, morph_est), dim=-1)
-        actions_mean = self.actor(updated_obs)
+        estimate = self.morph(morph_observations)
+        print(estimate)
+        combined_obs = torch.cat((observations, estimate), dim=-1)
+        actions_mean = self.actor(combined_obs)
         return actions_mean
 
     def evaluate(self, critic_observations, **kwargs):
         value = self.critic(critic_observations)
         return value
-    
-    def morph_estimate(self, morph_observations):
-        estimate = self.morph(morph_observations)
-        return estimate
 
 
 def get_activation(act_name):
@@ -159,6 +160,5 @@ def get_activation(act_name):
     elif act_name == "sigmoid":
         return nn.Sigmoid()
     else:
-        print("invalid actor_critic_activation function!")
+        print("invalid activation function!")
         return None
-
