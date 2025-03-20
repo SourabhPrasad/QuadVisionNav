@@ -44,8 +44,7 @@ import os
 import torch
 from datetime import datetime
 
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
-from rsl_rl.runners import OnPolicyRunner
+from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
 from isaaclab.envs import (
     DirectMARLEnv,
@@ -63,12 +62,12 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
-torch.backends.cudnn.deterministic = False
+torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
 project_dir = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(project_dir)
-from networks import OnPolicyRunner, RslRlMoralRunnerCfg
+from networks import MoralRunner, RslRlMoralRunnerCfg
 import envs
 
 @hydra_task_config(args_cli.task, "rsl_rl_cfg_entry_point")
@@ -85,6 +84,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # note: certain randomizations occur in the environment initialization so we set the seed here
     env_cfg.seed = agent_cfg.seed
     env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
+    torch.manual_seed(agent_cfg.seed)
 
     # specify directory for logging experiments
     log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)
@@ -125,7 +125,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     env = RslRlVecEnvWrapper(env)
 
     # create runner from rsl-rl
-    runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    runner = MoralRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     # write git state to logs
     runner.add_git_repo_to_log(__file__)
     # load the checkpoint

@@ -57,7 +57,7 @@ from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
 
 project_dir = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(project_dir)
-from networks import OnPolicyRunner, RslRlMoralRunnerCfg
+from networks import MoralRunner, RslRlMoralRunnerCfg
 import envs
 
 def main():
@@ -108,7 +108,7 @@ def main():
 
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
     # load previously trained model
-    ppo_runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    ppo_runner = MoralRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
     ppo_runner.load(resume_path)
 
     # obtain the trained policy for inference
