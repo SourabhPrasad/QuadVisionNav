@@ -15,6 +15,7 @@ from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
+from isaaclab.sensors import FrameTransformer, FrameTransformerCfg, OffsetCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
@@ -22,6 +23,7 @@ from isaaclab.utils import configclass
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 from .curriculum_terrain_cfg import ROUGH_TERRAINS_CURR_CFG
 
+from isaaclab_assets.robots.anymal import ANYMAL_C_CFG  # isort: skip
 from .custom_quad_cfg import QUAD_TEMPLATE_CFG, QUAD_TEMPLATE_CYL_CFG
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -95,7 +97,7 @@ class MoralFlatEnvCfg(DirectRLEnvCfg):
     )
 
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=False)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
 
     # events
     events: EventCfg = EventCfg()
@@ -107,6 +109,8 @@ class MoralFlatEnvCfg(DirectRLEnvCfg):
     # natural sort the list
     quad_usd_list.sort(key=lambda f: int(re.search(r'\d+', f).group()))
     quad_usd_path = [os.path.join(ASSET_DIR, file) for file in quad_usd_list]
+    # robot: ArticulationCfg = ANYMAL_C_CFG.replace(
+    #     prim_path="/World/envs/env_.*/Robot",
     robot: ArticulationCfg = QUAD_TEMPLATE_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         # spawn=sim_utils.MultiUsdFileCfg(
@@ -129,6 +133,14 @@ class MoralFlatEnvCfg(DirectRLEnvCfg):
     )
     contact_sensor: ContactSensorCfg = ContactSensorCfg(
         prim_path="/World/envs/env_.*/Robot/.*", history_length=3, update_period=0.005, track_air_time=True
+    )
+
+    frame_transformer: FrameTransformerCfg = FrameTransformerCfg(
+        prim_path="/World/envs/env_.*/Robot/base",
+        target_frames=[
+            FrameTransformerCfg.FrameCfg(prim_path="/World/envs/env_.*/Robot/.*FOOT"),
+        ],
+        debug_vis=False,
     )
 
     # reward scales
