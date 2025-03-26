@@ -50,7 +50,7 @@ import torch
 from datetime import datetime
 
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
-from rsl_rl.runners import OnPolicyRunner
+# from rsl_rl.runners import OnPolicyRunner
 
 from isaaclab.envs import (
     DirectMARLEnv,
@@ -73,6 +73,7 @@ torch.backends.cudnn.benchmark = False
 
 project_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 sys.path.append(project_dir)
+from networks import OnPolicyRunner
 import envs
 
 @hydra_task_config(args_cli.task, "rsl_rl_cfg_entry_point")
