@@ -55,7 +55,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper, expor
 
 project_dir = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(project_dir)
-from networks import OnPolicyRunner
+from networks import MoralRunner
 import envs
 
 def main():
