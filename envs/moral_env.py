@@ -1,24 +1,18 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
 from __future__ import annotations
-
-import os
-import json
 
 import gymnasium as gym
 import torch
-import math
+import os
+import json
 
 import isaaclab.sim as sim_utils
-import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation
 from isaaclab.envs import DirectRLEnv
 from isaaclab.sensors import ContactSensor, RayCaster
+from isaaclab.sensors import FrameTransformer
 
-from cfgs import MoralFlatEnvCfg, MoralRoughEnvCfg
+from cfgs.moral_env_cfg import MoralFlatEnvCfg, MoralRoughEnvCfg
+
 
 class MoralEnv(DirectRLEnv):
     cfg: MoralFlatEnvCfg | MoralRoughEnvCfg
@@ -26,6 +20,7 @@ class MoralEnv(DirectRLEnv):
     def __init__(self, cfg: MoralFlatEnvCfg | MoralRoughEnvCfg, render_mode: str | None = None, **kwargs):
         super().__init__(cfg, render_mode, **kwargs)
 
+        # Joint position command (deviation from default joint positions)
         self._actions = torch.zeros(self.num_envs, gym.spaces.flatdim(self.single_action_space), device=self.device)
         self._previous_actions = torch.zeros(
             self.num_envs, gym.spaces.flatdim(self.single_action_space), device=self.device
@@ -38,21 +33,13 @@ class MoralEnv(DirectRLEnv):
             if cfg.terrain.terrain_generator.curriculum:
                 self._curriculum_learning = True
 
-
-        # store temporal observation (morph-net input)
-        # self._temporal_observations = torch.zeros(
-        #     self.num_envs,
-        #     self.cfg.temporal_buffer_size,
-        #     gym.spaces.flatdim(self.single_action_space) + gym.spaces.flatdim(self.single_observation_space["policy"]),
-        #     device=self.device
-        # )
+        # buffer to store previous observations and actions
         self._temporal_observations = torch.zeros(
             self.num_envs,
             self.cfg.temporal_buffer_size,
             gym.spaces.flatdim(self.single_observation_space["policy"]) + gym.spaces.flatdim(self.single_action_space),
             device=self.device
         )
-
 
         # store error between robot velocity and command velocity
         self._velocity_error = torch.full((self.num_envs,), float('inf'), device=self.device)
@@ -89,27 +76,39 @@ class MoralEnv(DirectRLEnv):
                 "flat_orientation_l2",
             ]
         }
-        
         # Get specific body indices
         self._base_id, _ = self._contact_sensor.find_bodies("base")
         self._feet_ids, _ = self._contact_sensor.find_bodies(".*FOOT")
-        self._undesired_contact_body_ids, _ = self._contact_sensor.find_bodies(".*THIGH")
+        self._undesired_contact_body_ids, _ = self._contact_sensor.find_bodies(".*CALF")
+        self._terminate_ids, _ = self._contact_sensor.find_bodies(["base", ".*HIP", ".*THIGH"]) 
 
     def _setup_scene(self):
+        # add robot
         self._robot = Articulation(self.cfg.robot)
         self.scene.articulations["robot"] = self._robot
+        
+        # add contact sensor
         self._contact_sensor = ContactSensor(self.cfg.contact_sensor)
         self.scene.sensors["contact_sensor"] = self._contact_sensor
+
+        # add frame transformer
+        self._frame_transformer = FrameTransformer(self.cfg.frame_transformer)
+        self.scene.sensors["frame_transformer"] = self._frame_transformer
+        
+        # add height scanner if rough terrain
         if isinstance(self.cfg, MoralRoughEnvCfg):
             # we add a height scanner for perceptive locomotion
             self._height_scanner = RayCaster(self.cfg.height_scanner)
             self.scene.sensors["height_scanner"] = self._height_scanner
+        
+        # add terrain
         self.cfg.terrain.num_envs = self.scene.cfg.num_envs
         self.cfg.terrain.env_spacing = self.scene.cfg.env_spacing
         self._terrain = self.cfg.terrain.class_type(self.cfg.terrain)
+        
         # clone and replicate
-        # self.scene.clone_environments(copy_from_source=False)
-        self.scene.filter_collisions(global_prim_paths=[self.cfg.terrain.prim_path])
+        self.scene.clone_environments(copy_from_source=False)
+        
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
@@ -122,22 +121,23 @@ class MoralEnv(DirectRLEnv):
         self._robot.set_joint_position_target(self._processed_actions)
 
     def _get_observations(self) -> dict:
+        # store previous action
         self._previous_actions = self._actions.clone()
         
+        # height data
         height_data = None
         if isinstance(self.cfg, MoralRoughEnvCfg):
             height_data = (
                 self._height_scanner.data.pos_w[:, 2].unsqueeze(1) - self._height_scanner.data.ray_hits_w[..., 2] - 0.5
             ).clip(-1.0, 1.0)
         
-        # feet data (contact and height)
+        # feet contact
         net_contact_forces = self._contact_sensor.data.net_forces_w_history
         feet_contact = (
             torch.max(torch.norm(net_contact_forces[:, :, self._feet_ids], dim=-1), dim=1)[0] > 1.0
         ).to(self.device)
-        feet_height = self._robot.data.body_pos_w[:, self._feet_ids][..., -1].to(self.device)
-        # print(f"[DEBUG]: Feet Contact: {feet_contact}")
-        # print(f"[DEBUG]: Feet Height: {feet_height}")
+        # feet height w.r.t base frame
+        feet_height = self._frame_transformer.data.target_pos_source[..., -1]
 
         # ground truth value for training morph-net
         morph_target = torch.cat(
@@ -151,12 +151,13 @@ class MoralEnv(DirectRLEnv):
             ],
             dim=-1
         )
-
+        
         # actor observations
         policy_obs = torch.cat(
             [
                 tensor
                 for tensor in (
+                    # self._robot.data.root_lin_vel_b,
                     self._robot.data.root_ang_vel_b,
                     self._robot.data.projected_gravity_b,
                     self._commands,
@@ -169,7 +170,7 @@ class MoralEnv(DirectRLEnv):
             dim=-1,
         )
 
-        # critic observation
+        # critic observations
         critic_obs = torch.cat(
             [
                 tensor
@@ -179,29 +180,20 @@ class MoralEnv(DirectRLEnv):
                     height_data,
                     feet_height,
                     feet_contact,
-                    self._actuator_gains,
+                    self._actuator_gains
                 )
                 if tensor is not None
             ],
-            dim=-1
+            dim=-1,
         )
 
-        # update temporal observation buffer with latest action and observation
         self._update_temporal_observations(torch.cat((policy_obs, self._actions), dim=-1))
-        # calculate velocity error 
-        # self._update_velocity_error(None)
-
-        # print(f"[DEBUG] Policy: {policy_obs.shape}")
-        # print(f"[DEBUG] Critic: {critic_obs.shape}")
-        # print(f"[DEBUG] Target: {morph_target.shape}")
-        # print(f"[DEBUG] Temporal: {self._temporal_observations.flatten(1, 2).shape}")
 
         observations = {
             "policy": policy_obs,
             "critic": critic_obs,
             "morph_obs": self._temporal_observations.flatten(1, 2),
             "morph_target": morph_target,
-            "mean_level": self._mean_terrain_level,
         }
         return observations
 
@@ -258,34 +250,23 @@ class MoralEnv(DirectRLEnv):
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
         time_out = self.episode_length_buf >= self.max_episode_length - 1
         net_contact_forces = self._contact_sensor.data.net_forces_w_history
-        died = torch.any(torch.max(torch.norm(net_contact_forces[:, :, self._base_id], dim=-1), dim=1)[0] > 1.0, dim=1)
-        # up_vector = torch.tensor([0.0, 0.0, 1.0], device=self.device).expand(self.num_envs, 3)
-        # up_vector = math_utils.quat_rotate(self._robot.data.root_quat_w, up_vector)
-        # tilt_angle = torch.acos(up_vector[:, 2])
-        # died = tilt_angle > math.pi / 3  # 60 degrees
-        
+        died = torch.any(torch.max(torch.norm(net_contact_forces[:, :, self._terminate_ids], dim=-1), dim=1)[0] > 1.0, dim=1)
         return died, time_out
 
     def _reset_idx(self, env_ids: torch.Tensor | None):
         if env_ids is None or len(env_ids) == self.num_envs:
             env_ids = self._robot._ALL_INDICES
-        super()._reset_idx(env_ids)
-        
-        if isinstance(self.cfg, MoralRoughEnvCfg):
-            self._set_curriculum_lvl(env_ids)
         self._robot.reset(env_ids)
-        
+        super()._reset_idx(env_ids)
         if len(env_ids) == self.num_envs:
             # Spread out the resets to avoid spikes in training when many environments reset at a similar time
             self.episode_length_buf[:] = torch.randint_like(self.episode_length_buf, high=int(self.max_episode_length))
-        
         self._actions[env_ids] = 0.0
         self._previous_actions[env_ids] = 0.0
         self._temporal_observations[env_ids] = 0.0
-        
+        self._velocity_error[env_ids] = float('inf')
         # Sample new commands
         self._commands[env_ids] = torch.zeros_like(self._commands[env_ids]).uniform_(-1.0, 1.0)
-        
         # Reset robot state
         joint_pos = self._robot.data.default_joint_pos[env_ids]
         joint_vel = self._robot.data.default_joint_vel[env_ids]
@@ -294,7 +275,6 @@ class MoralEnv(DirectRLEnv):
         self._robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
         self._robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
         self._robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
-        
         # Logging
         extras = dict()
         for key in self._episode_sums.keys():
@@ -309,7 +289,7 @@ class MoralEnv(DirectRLEnv):
         self.extras["log"].update(extras)
 
     def _update_temporal_observations(self, latest_observation: torch.Tensor) -> None:
-        self._temporal_observations[:, :-1] = self._temporal_observations[:, 1:]
+        self._temporal_observations[:, :-1] = self._temporal_observations.clone()[:, 1:]
         self._temporal_observations[:, -1] = latest_observation
 
     def _set_curriculum_lvl(self, env_ids: torch.Tensor | None) -> None:
@@ -339,4 +319,3 @@ class MoralEnv(DirectRLEnv):
         current_vel = torch.cat([current_lin_vel, current_ang_vel], dim=-1,)
     
         self._velocity_error = torch.sum(torch.square(self._commands - current_vel), dim=1)
-
