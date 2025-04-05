@@ -30,7 +30,7 @@ class MoralRunner:
 
         # input dims for actor, critic and morph nets
         obs, extras = self.env.get_observations()
-        num_obs = obs.shape[1]
+        num_obs = obs.shape[1] + 12
         if "critic" in extras["observations"]:
             num_critic_obs = extras["observations"]["critic"].shape[1]
         else:
@@ -40,6 +40,9 @@ class MoralRunner:
             num_morph_target = extras["observations"]["morph_target"].shape[1]
         else:
             raise Exception("MorAL requires morph_obs and morph_target in the observation dictionary.")
+        
+        print(f"Observation space: {num_obs}, Critic observation space: {num_critic_obs}")
+        print(f"Morphology observation space: {num_morph_obs}, Morphology target space: {num_morph_target}")
 
         # initialize network
         actor_critic_class = eval(self.policy_cfg.pop("class_name"))
@@ -191,7 +194,7 @@ class MoralRunner:
             if mean_reward > highest_mean_reward:
                 print(f"[INFO]: Saving current best model with reward: {mean_reward}")
                 highest_mean_reward = mean_reward
-                self.save(os.path.join(self.log_dir, f"model_best.pt"))
+                self.save(os.path.join(self.log_dir, f"best.pt"))
             
             if it % self.save_interval == 0:
                 self.save(os.path.join(self.log_dir, f"model_{it}.pt"))
@@ -208,6 +211,12 @@ class MoralRunner:
         print(f"Training finished after {tot_iter} iterations.")
         self.save(os.path.join(self.log_dir, f"model_{self.current_learning_iteration}.pt"))
         print(f"Highest Mean Reward: {highest_mean_reward}")
+
+    # def linear_scheduler(self, curr_iter, max_iter):
+    #     mul = max(0, 2000 - curr_iter)/max_iter
+    #     lr = 1e-6 + (self.alg_cfg["learning_rate"] - 1e-6) * mul
+    #     self.alg.learning_rate = lr
+
 
     def log(self, locs: dict, width: int = 80, pad: int = 35):
         self.tot_timesteps += self.num_steps_per_env * self.env.num_envs
@@ -242,6 +251,7 @@ class MoralRunner:
         self.writer.add_scalar("Loss/surrogate", locs["mean_surrogate_loss"], locs["it"])
         self.writer.add_scalar("Loss/regression", locs["mean_regression_loss"], locs["it"])
         self.writer.add_scalar("Loss/learning_rate", self.alg.learning_rate, locs["it"])
+        self.writer.add_scalar("Loss/morph_learning_rate", self.alg.morph_lr, locs["it"])
         self.writer.add_scalar("Policy/mean_noise_std", mean_std.item(), locs["it"])
         self.writer.add_scalar("Perf/total_fps", fps, locs["it"])
         self.writer.add_scalar("Perf/collection time", locs["collection_time"], locs["it"])
@@ -334,6 +344,13 @@ class MoralRunner:
                 self.obs_normalizer.to(device)
             policy = lambda x: self.alg.actor_critic.act_inference(self.obs_normalizer(x))  # noqa: E731
         return policy
+    
+    def get_inference_estimate(self, device=None):
+        self.eval_mode()  # switch to evaluation mode (dropout for example)
+        if device is not None:
+            self.alg.actor_critic.to(device)
+        estimate = self.alg.actor_critic.morph_estimate
+        return estimate
 
     def train_mode(self):
         self.alg.actor_critic.train()

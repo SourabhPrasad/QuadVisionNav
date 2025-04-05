@@ -32,7 +32,7 @@ class MorAL(nn.Module):
         actor_critic_activation = get_activation(actor_critic_activation)
         morph_activation = get_activation(morph_activations)
 
-        mlp_input_dim_a = num_actor_obs + 12 # Adding morph net output size
+        mlp_input_dim_a = num_actor_obs #+ 12 # Adding morph net output size
         mlp_input_dim_c = num_critic_obs
         mlp_input_dim_m = num_morph_obs
         
@@ -71,6 +71,7 @@ class MorAL(nn.Module):
             else:
                 morph_layers.append(nn.Linear(morph_hidden_dims[layer_index], morph_hidden_dims[layer_index + 1]))
                 morph_layers.append(morph_activation)
+        
         self.morph = nn.Sequential(*morph_layers)
 
         print(f"Actor MLP: {self.actor}")
@@ -113,17 +114,17 @@ class MorAL(nn.Module):
     def entropy(self):
         return self.distribution.entropy().sum(dim=-1)
 
-    def update_distribution(self, observations, morph_observations):
+    def update_distribution(self, observations):
         # get morph-net estimate and concatenate with observations
-        estimate = self.morph(morph_observations)
-        combined_obs = torch.cat((observations, estimate), dim=-1)
-        
+        # estimate = self.morph(morph_observations).detach()
+        # combined_obs = torch.cat((observations, estimate), dim=-1)
+        combined_obs = observations
         mean = self.actor(combined_obs)
         std = self.std.expand_as(mean)
         self.distribution = Normal(mean, std)
 
-    def act(self, observations, morph_observations, **kwargs):
-        self.update_distribution(observations, morph_observations)
+    def act(self, observations, **kwargs):
+        self.update_distribution(observations)
         return self.distribution.sample()
 
     def get_actions_log_prob(self, actions):
@@ -132,10 +133,10 @@ class MorAL(nn.Module):
     def morph_estimate(self, morph_observations):
         return self.morph(morph_observations)
 
-    def act_inference(self, observations, morph_observations):
-        estimate = self.morph(morph_observations)
-        print(estimate)
-        combined_obs = torch.cat((observations, estimate), dim=-1)
+    def act_inference(self, observations, **kwargs):
+        # estimate = self.morph(morph_observations)
+        # combined_obs = torch.cat((observations, estimate), dim=-1)
+        combined_obs = observations
         actions_mean = self.actor(combined_obs)
         return actions_mean
 

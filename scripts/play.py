@@ -113,6 +113,7 @@ def main():
 
     # obtain the trained policy for inference
     policy = ppo_runner.get_inference_policy(device=env.unwrapped.device)
+    estimator = ppo_runner.get_inference_estimate(device=env.unwrapped.device)
 
     # export policy to onnx/jit
     export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
@@ -127,7 +128,8 @@ def main():
 
     # reset environment
     obs, extras = env.get_observations()
-    morph_obs = extras["observations"]["morph_obs"]
+    estimate = estimator(extras["observations"]["morph_obs"])
+    obs = torch.cat((obs, estimate), dim=-1)
     timestep = 0
     # simulate environment
     while simulation_app.is_running():
@@ -135,10 +137,11 @@ def main():
         # run everything in inference mode
         with torch.inference_mode():
             # agent stepping
-            actions = policy(obs, morph_obs)
+            actions = policy(obs)
             # env stepping
             obs, _, _, infos = env.step(actions)
-            morph_obs = infos["observations"]["morph_obs"]
+            estimate = estimator(infos["observations"]["morph_obs"])
+            obs = torch.cat((obs, estimate), dim=-1)
         if args_cli.video:
             timestep += 1
             # Exit the play loop after recording one video
